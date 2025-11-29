@@ -62,15 +62,15 @@ HIDDEN_DIM_GL= 128
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Hidden dimension for the :data:`model.GraphLearner.GraphLearner` module"""
 
-HIDDEN_DIM_GGNN= 256
+HIDDEN_DIM_GGNN= 128
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Hidden dimension in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
-GRAPH_SKIP_CONN= 0.3
+GRAPH_SKIP_CONN= 0.1
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Skip connection weight for adjacency updates"""
 
-DROPOUT= 0.5
+DROPOUT= 0.6
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Dropout probability applied in the attention layer for the :data:`model.GraphLearner.GraphLearner` module"""
 
@@ -78,7 +78,7 @@ EPSILON= None
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Threshold for deleting weak connections in the learned graph for the :data:`model.GraphLearner.GraphLearner` module. If None, no deleting is applied"""
 
-NUM_HEADS= 8
+NUM_HEADS= 4
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Number of heads for multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
@@ -90,7 +90,7 @@ USE_GATv2= True
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
-USE_GRU= True
+USE_GRU= False
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use GRU module and hidden state in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
