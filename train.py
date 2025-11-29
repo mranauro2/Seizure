@@ -35,7 +35,7 @@ import re
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 # it is the perc% of the batch size
-perc= 10
+perc= 2
 MIN_SAMPLE_PER_CLASS=  max(1, round( perc/100 * BATCH_SIZE ))
 MIN_SAMPLER_PER_BATCH= max(1, round( perc/100 * BATCH_SIZE ))
 
