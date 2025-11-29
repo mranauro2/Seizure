@@ -36,7 +36,7 @@ TEST_PATIENT_IDS= ["chb05"]
 PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""
 
-BATCH_SIZE= 64
+BATCH_SIZE= 96
 """Batch size used during the training. The last batch can have different size"""
 
 NUM_WORKERS= 16
@@ -62,5 +62,7 @@ PERCENTAGE_MARGIN= 0.00
 """Percentage of margin needed with respect to the metric considered to save the model"""
 
 EARLY_STOP_PATIENCE= 20 
-"""Number of epoch to wait to early stop the model training"""
+"""Number of epochs to wait to early stop the model training"""
 
+START_USE_EARLY_STOP= 20
+"""Number of epochs to wait before using the early stop"""

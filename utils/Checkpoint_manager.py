@@ -7,7 +7,7 @@ PERIODIC_SAVE_WARN= 0.2
 
 class CheckPoint():
     """A checkpoint manager that determines when to save the model based on various criteria."""
-    def __init__(self, best_k:int=3, each_spacing:int=None, total_epochs:int=None, higher_is_better:bool=True, early_stop_patience:int=None):
+    def __init__(self, best_k:int=3, each_spacing:int=None, total_epochs:int=None, higher_is_better:bool=True, early_stop_patience:int=None, early_stop_start:int=None):
         """
         A checkpoint manager that determines when to save the model based on various criteria.
         At each iteration of the model the function `check_saving` must be called
@@ -18,6 +18,7 @@ class CheckPoint():
             total_epochs (int):         Total number of epochs expected. Used to detect the last epoch. Set to None to disable
             higher_is_better (bool):    If True, higher metric values are better (e.g., accuracy). If False, lower metric values are better (e.g., loss)
             early_stop_patience (int):  If not None, stop the model early to prevent overfitting
+            early_stop_start (int):     If not None and `early_stop_patience` not None, start the early stop scope after a certain number of epochs
         
         Notes:
             The best K model tracking uses a margin to determine significant improvements.
@@ -41,6 +42,7 @@ class CheckPoint():
         self.higher_is_better = higher_is_better
         
         self.early_stop_patience = early_stop_patience
+        self.early_stop_start= early_stop_start
         self.patience_counter = 0
         self.best_metric = None
         
@@ -99,6 +101,9 @@ class CheckPoint():
     def _update_early_stop(self, metric: float = None) -> None:
         """Update early stopping counter based on whether metric improved."""
         if (self.early_stop_patience is None) or (metric is None):
+            return
+        
+        if (self.early_stop_start is None) or (self.early_stop_patience < self.epochs_count):
             return
         
         if (self.best_metric is None):

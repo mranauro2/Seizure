@@ -37,10 +37,10 @@ Maintain only the `top_k` higher value when compute the adjacency matrix"""
 # DAMPING FACTOR FOR LOSS FUNCTIONS
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-DAMP_SMOOTH= 0.5
+DAMP_SMOOTH= 1.0
 """Damping factor for :func:`model.loss_functions.smoothness_loss_func`"""
 
-DAMP_DEGREE= 0.01
+DAMP_DEGREE= 0.1
 """Damping factor for :func:`model.loss_functions.degree_regularization_loss_func`"""
 
 DAMP_SPARSITY= 0.3

@@ -272,7 +272,8 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     
     # real training
     higher_is_better= False
-    checkpoint_observer= CheckPoint(best_k=BEST_K_MODELS, each_spacing=MAX_NUM_EPOCHS, total_epochs=num_epochs, higher_is_better=higher_is_better, early_stop_patience=EARLY_STOP_PATIENCE)
+    early_stop_start= (START_USE_EARLY_STOP-START_EPOCH) if (START_USE_EARLY_STOP-START_EPOCH)>0 else 0
+    checkpoint_observer= CheckPoint(best_k=BEST_K_MODELS, each_spacing=MAX_NUM_EPOCHS, total_epochs=num_epochs, higher_is_better=higher_is_better, early_stop_patience=EARLY_STOP_PATIENCE, early_stop_start=early_stop_start)
     checkpoint_observer.margin= PERCENTAGE_MARGIN
     
     LOGGER.info(
