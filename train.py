@@ -34,10 +34,8 @@ import re
 # GLOBAL VARIABLE
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-# it is the perc% of the batch size
-perc= 2
-MIN_SAMPLE_PER_CLASS=  max(1, round( perc/100 * BATCH_SIZE ))
-MIN_SAMPLER_PER_BATCH= max(1, round( perc/100 * BATCH_SIZE ))
+MIN_SAMPLE_PER_CLASS=  max(1, round( PERCENTAGE_BOTH_CLASS_IN_BATCH/100 * BATCH_SIZE ))
+MIN_SAMPLER_PER_BATCH= max(1, round( PERCENTAGE_BOTH_CLASS_IN_BATCH/100 * BATCH_SIZE ))
 
 DEVICE= "cpu"
 NUM_SEIZURE_DATA= 0

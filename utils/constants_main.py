@@ -36,6 +36,9 @@ TEST_PATIENT_IDS= ["chb05"]
 PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""
 
+PERCENTAGE_BOTH_CLASS_IN_BATCH= 20
+"""Min percentage number of both class in a batch"""
+
 BATCH_SIZE= 96
 """Batch size used during the training. The last batch can have different size"""
 
