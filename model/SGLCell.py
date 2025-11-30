@@ -9,7 +9,7 @@ class SGLCell(nn.Module):
     """
     Spatio-Graph Learning Cell (SGLC) with Graph Learner, the Gated Graph Neural Networks and the GRU module
     """
-    def __init__(self, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_GRU:bool=False, device:str=None):
+    def __init__(self, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, use_GRU:bool=False, device:str=None):
         """
         Use the Graph Learner, the Gated Graph Neural Networks and the GRU module to obtain new representations
         
@@ -27,6 +27,8 @@ class SGLCell(nn.Module):
             num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
             num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
             use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
+            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Gated Graph Neural Networks module. If True the parameter `use_GATv2` and `num_layers` are ignored
+            concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
             use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
             device (str):               Device to place the model on
@@ -44,10 +46,12 @@ class SGLCell(nn.Module):
             input_size=input_dim,
             hidden_size=hidden_dim_GL,
             num_nodes=num_nodes,
-            dropout=dropout,
-            epsilon=epsilon,
             num_heads=num_heads,
             use_GATv2=use_GATv2,
+            use_Transformer=use_Transformer,
+            concat=concat,
+            dropout=dropout,
+            epsilon=epsilon,
             device=device
         )
         

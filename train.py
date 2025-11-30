@@ -118,6 +118,8 @@ def additional_info(*parameters_to_process:tuple[str,any]) -> str:
         ("GRAPH_SKIP_CONN", GRAPH_SKIP_CONN),
         ("DROPOUT", DROPOUT),
         ("USE_GATv2", USE_GATv2),
+        ("USE_TRANSFORMER", USE_TRANSFORMER),
+        ("CONCAT", CONCAT),
         ("USE_GRU", USE_GRU)
     ]
     list_to_print.extend(parameters_to_process)
@@ -383,9 +385,9 @@ def main():
     train_sampler= SeizureSampler(dataset.targets_list(), trian_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
     val_sampler=   SeizureSampler(dataset.targets_list(), val_set.indices,   batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
 
-    test_loader=  DataLoader(dataset, sampler=test_sampler,  batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
-    train_loader= DataLoader(dataset, sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
-    val_loader=   DataLoader(dataset, sampler=val_sampler,   batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
+    test_loader=  DataLoader(dataset, sampler=test_sampler,  batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
+    train_loader= DataLoader(dataset, sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
+    val_loader=   DataLoader(dataset, sampler=val_sampler,   batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
     
     # print on screen some informations
     def pos_neg_samples(dictionary:dict[str, list[int]]):
@@ -437,6 +439,8 @@ def main():
             num_heads= NUM_HEADS,
             num_steps= NUM_STEPS,
             use_GATv2= USE_GATv2,
+            use_Transformer=USE_TRANSFORMER,
+            concat=CONCAT,
             use_GRU= USE_GRU,
             
             device= DEVICE

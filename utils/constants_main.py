@@ -52,7 +52,7 @@ RANDOM_STATE= 13
 # OTHERS INFO
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-LEARNING_RATE= 1e-5
+LEARNING_RATE= 5e-5
 """Learning rate of the model"""
 
 BEST_K_MODELS= 0

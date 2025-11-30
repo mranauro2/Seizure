@@ -11,7 +11,7 @@ class SGLCEncoder(nn.Module):
     """
     Spatio-Graph Learning Cell (SGLC) Encoder using multiple SGLCell layers
     """
-    def __init__(self, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_GRU:bool=False, device:str=None):
+    def __init__(self, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, use_GRU:bool=False, device:str=None):
         """
         Use a stack of SGLCell to learn from the data. Each SGLCell use the GL, the GGNN and the GRUCell module
         
@@ -30,6 +30,8 @@ class SGLCEncoder(nn.Module):
             num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
             num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
             use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
+            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Gated Graph Neural Networks module. If True the parameter `use_GATv2` and `num_layers` are ignored
+            concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
             use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
             device (str):               Device to place the model on
@@ -52,6 +54,8 @@ class SGLCEncoder(nn.Module):
                     num_heads=num_heads,
                     num_steps=num_steps,
                     use_GATv2=use_GATv2,
+                    use_Transformer=use_Transformer,
+                    concat=concat,
                     use_GRU=use_GRU,
                     
                     device=device
@@ -137,7 +141,7 @@ class SGLCModel_classification(nn.Module):
     """
     Classification model using SGLC Encoder with fully connected output layer
     """
-    def __init__(self, num_classes:int, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_GRU:bool=False, device:str=None):
+    def __init__(self, num_classes:int, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, use_GRU:bool=False, device:str=None):
         """
         Use a stack of SGLCell to learn from the data. Each SGLCell use the GL, the GGNN and the GRUCell module
         
@@ -158,6 +162,8 @@ class SGLCModel_classification(nn.Module):
             num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
             num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
             use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
+            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Gated Graph Neural Networks module. If True the parameter `use_GATv2` and `num_layers` are ignored
+            concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
             use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
             device (str):               Device to place the model on
@@ -178,6 +184,8 @@ class SGLCModel_classification(nn.Module):
             'num_heads': num_heads,
             'num_steps': num_steps,
             'use_GATv2': use_GATv2,
+            'use_Transformer': use_Transformer,
+            'concat': concat,
             'use_GRU': use_GRU,
             'device': device
         }
@@ -198,6 +206,8 @@ class SGLCModel_classification(nn.Module):
             num_heads=num_heads,
             num_steps=num_steps,
             use_GATv2=use_GATv2,
+            use_Transformer=use_Transformer,
+            concat=concat,
             use_GRU=use_GRU,
             
             device=device

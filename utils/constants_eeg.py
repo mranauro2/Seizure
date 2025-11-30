@@ -90,6 +90,14 @@ USE_GATv2= False
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
+USE_TRANSFORMER= True
+"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
+CONCAT= True
+"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+Used only if `use_Transformer` is True. Concatenate (True) or average (False) the multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
 USE_GRU= False
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use GRU module and hidden state in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
