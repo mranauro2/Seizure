@@ -111,6 +111,7 @@ def func_operation(x:Tensor) -> Tensor:
 def additional_info(*parameters_to_process:tuple[str,any]) -> str:
     """Extract static additionl info"""    
     list_to_print= [
+        ("NUM_CELLS", NUM_CELLS),
         ("LEARNING_RATE", LEARNING_RATE), 
         ("DAMP_SMOOTH", DAMP_SMOOTH),
         ("DAMP_DEGREE", DAMP_DEGREE),
@@ -279,11 +280,13 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     LOGGER.info(
         "CheckPoint will save {} values:".format('higher' if higher_is_better else 'lower') +
         "\n" +
-        "\tbest K model : {} with margin of {:.2f}%".format(BEST_K_MODELS, 100*PERCENTAGE_MARGIN) +
+        "\tbest K model     : {} with margin of {:.2f}%".format(BEST_K_MODELS, 100*PERCENTAGE_MARGIN) +
         "\n" +
-        "\teach epochs  : {}".format(MAX_NUM_EPOCHS) +
+        "\teach epochs      : {}".format(MAX_NUM_EPOCHS) +
         "\n"+
-        "\tearly stop   : {}".format(EARLY_STOP_PATIENCE)
+        "\tearly stop       : {}".format(EARLY_STOP_PATIENCE) +
+        "\n"+
+        "\tearly_stop_start : {}".format(early_stop_start)
     )
     
     for epoch_num in tqdm(range(num_epochs), desc="Progress", unit="epoch"):
