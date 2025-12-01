@@ -58,7 +58,7 @@ NUM_CELLS= 2
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Number of the :data:`model.SGLCell.SGLCell` layers in the encoder stack"""
 
-HIDDEN_DIM_GL= 128
+HIDDEN_DIM_GL= 192
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Hidden dimension for the :data:`model.GraphLearner.GraphLearner` module"""
 
@@ -86,11 +86,11 @@ NUM_STEPS= 5
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Number of propagation steps in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
-USE_GATv2= False
+USE_GATv2= True
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
-USE_TRANSFORMER= False
+USE_TRANSFORMER= True
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
