@@ -2,14 +2,18 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from model.GraphLearner import GraphLearner
-from model.GatedGraphNeuralNetworks import GGNNLayer
+try:
+    from model.GraphLearner import GraphLearner
+    from model.GatedGraphNeuralNetworks import GGNNLayer
+except ModuleNotFoundError:
+    from GraphLearner import GraphLearner
+    from GatedGraphNeuralNetworks import GGNNLayer
 
 class SGLCell(nn.Module):
     """
     Spatio-Graph Learning Cell (SGLC) with Graph Learner, the Gated Graph Neural Networks and the GRU module
     """
-    def __init__(self, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, use_propagator:bool=True, use_GRU:bool=False, device:str=None):
+    def __init__(self, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, num_layers:int=3, use_propagator:bool=True, use_GRU:bool=False, device:str=None):
         """
         Use the Graph Learner, the Gated Graph Neural Networks and the GRU module to obtain new representations
         
@@ -26,10 +30,11 @@ class SGLCell(nn.Module):
             epsilon (float):            Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
             num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
             num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
-            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
-            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Gated Graph Neural Networks module. If True the parameter `use_GATv2` and `num_layers` are ignored
+            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Graph Learner module
+            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Graph Learner module. If True the parameter `use_GATv2` is ignored
             concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
-            use_propagator (bool):      Use standard propagator module instead of GRU module in the Graph Learner module
+            num_layers (int):           Number of message passing layers in the GAT or Transformer module for the Graph Learner module
+            use_propagator (bool):      Use standard propagator module instead of GRU module in the Gated Graph Neural Networks module
             use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
             device (str):               Device to place the model on

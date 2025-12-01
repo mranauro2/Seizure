@@ -162,6 +162,7 @@ class SeizureDataset(Dataset):
             adj = utils.normalize_laplacian_spectrum(adj_cross_corr)
         elif self.method=="plv":
             # from (clip_len, num_channels, feature_dim) to (num_channels, clip_len*feature_dim)
+            curr_feature= curr_feature.numpy()
             curr_feature= curr_feature.transpose((1,0,2)).reshape(curr_feature.shape[1], -1)
             adj= utils.compute_plv_matrix(curr_feature)
         else:

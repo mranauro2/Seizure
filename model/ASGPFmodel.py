@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from model.SGLCell import SGLCell
-import model.utils as utils
+try:
+    from model.SGLCell import SGLCell
+except ModuleNotFoundError:
+    from SGLCell import SGLCell
 
 import os
 
@@ -11,7 +13,7 @@ class SGLCEncoder(nn.Module):
     """
     Spatio-Graph Learning Cell (SGLC) Encoder using multiple SGLCell layers
     """
-    def __init__(self, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, use_propagator:bool=True, use_GRU:bool=False, device:str=None):
+    def __init__(self, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, num_layers:int=3, use_propagator:bool=True, use_GRU:bool=False, device:str=None):
         """
         Use a stack of SGLCell to learn from the data. Each SGLCell use the GL, the GGNN and the GRUCell module
         
@@ -29,10 +31,11 @@ class SGLCEncoder(nn.Module):
             epsilon (float):            Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
             num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
             num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
-            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
-            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Gated Graph Neural Networks module. If True the parameter `use_GATv2` and `num_layers` are ignored
+            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Graph Learner module
+            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Graph Learner module. If True the parameter `use_GATv2` is ignored
             concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
-            use_propagator (bool):      Use standard propagator module instead of GRU module in the Graph Learner module
+            num_layers (int):           Number of message passing layers in the GAT or Transformer module for the Graph Learner module
+            use_propagator (bool):      Use standard propagator module instead of GRU module in the Gated Graph Neural Networks module
             use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
             device (str):               Device to place the model on
@@ -57,6 +60,7 @@ class SGLCEncoder(nn.Module):
                     use_GATv2=use_GATv2,
                     use_Transformer=use_Transformer,
                     concat=concat,
+                    num_layers=num_layers,
                     use_propagator=use_propagator,
                     use_GRU=use_GRU,
                     
@@ -143,7 +147,7 @@ class SGLCModel_classification(nn.Module):
     """
     Classification model using SGLC Encoder with fully connected output layer
     """
-    def __init__(self, num_classes:int, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, use_GRU:bool=False, use_propagator:bool=True, device:str=None):
+    def __init__(self, num_classes:int, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, num_layers:int=3, use_GRU:bool=False, use_propagator:bool=True, device:str=None):
         """
         Use a stack of SGLCell to learn from the data. Each SGLCell use the GL, the GGNN and the GRUCell module
         
@@ -163,10 +167,11 @@ class SGLCModel_classification(nn.Module):
             epsilon (float):            Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
             num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
             num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
-            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
-            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Gated Graph Neural Networks module. If True the parameter `use_GATv2` and `num_layers` are ignored
+            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Graph Learner module
+            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Graph Learner module. If True the parameter `use_GATv2` is ignored
             concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
-            use_propagator (bool):      Use standard propagator module instead of GRU module in the Graph Learner module
+            num_layers (int):           Number of message passing layers in the GAT or Transformer module for the Graph Learner module
+            use_propagator (bool):      Use standard propagator module instead of GRU module in the Gated Graph Neural Networks module
             use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
             device (str):               Device to place the model on
@@ -189,6 +194,7 @@ class SGLCModel_classification(nn.Module):
             'use_GATv2': use_GATv2,
             'use_Transformer': use_Transformer,
             'concat': concat,
+            'num_layers': num_layers,
             'use_propagator': use_propagator,
             'use_GRU': use_GRU,
             'device': device
@@ -212,6 +218,7 @@ class SGLCModel_classification(nn.Module):
             use_GATv2=use_GATv2,
             use_Transformer=use_Transformer,
             concat=concat,
+            num_layers=num_layers,
             use_propagator=use_propagator,
             use_GRU=use_GRU,
             
@@ -304,3 +311,46 @@ class SGLCModel_classification(nn.Module):
         model.load_state_dict(checkpoint['model_state_dict'])
         
         return model
+
+if __name__=="__main__":
+    def count_parameters(model:nn.Module):
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    num_classes     = 2
+    num_cells       = 2
+    input_dim       = 256//2
+    num_nodes       = 21
+    hidden_dim_GL   = 128
+    hidden_dim_GGNN = 256
+    dropout         = 0.5
+    num_heads       = 8
+    use_GATv2       = False
+    use_Transformer = True
+    concat          = True
+    use_propagator  = False
+    use_GRU         = False
+    
+    model= SGLCModel_classification(
+        num_classes     = num_classes,
+        num_cells       = num_cells,
+        input_dim       = input_dim,
+        num_nodes       = num_nodes,
+        hidden_dim_GL   = hidden_dim_GL,
+        hidden_dim_GGNN = hidden_dim_GGNN,
+        dropout         = dropout,
+        num_heads       = num_heads,
+        use_GATv2       = use_GATv2,
+        use_Transformer = use_Transformer,
+        concat          = concat,
+        use_GRU         = use_GRU,
+        use_propagator  = use_propagator
+    )
+    
+    list_to_print= [(key,value) for key,value in model.config.items()]
+    string= ""
+    ljust_value= max([len(item) for item,_ in list_to_print])
+    for name,value in list_to_print:
+        string += "{} : {}\n".format(name.ljust(ljust_value), value)
+    
+    print(f"Total size model : {count_parameters(model):,}")
+    print(f"\nUsing parametrs:\n{string}")

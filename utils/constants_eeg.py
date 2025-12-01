@@ -98,6 +98,10 @@ CONCAT= True
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Used only if `use_Transformer` is True. Concatenate (True) or average (False) the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
+NUM_LAYERS= 3
+"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+Number of message passing layers in the GAT or Transformer module for the :data:`model.GraphLearner.GraphLearner` module"""
+
 USE_STANDARD_PROPAGATOR= False
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use standard propagator module instead of GRU module in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""

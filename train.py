@@ -4,7 +4,7 @@
 
 import torch
 from torch.nn import functional as F
-from torch.utils.data import DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader, Subset
 
 from utils.Checkpoint_manager import CheckPoint
 from utils.constants_eeg import *
@@ -19,6 +19,7 @@ from data.dataloader import SeizureDataset, SeizureSampler
 from model.ASGPFmodel import SGLCModel_classification
 from model.loss_functions import *
 
+from torchvision.ops import sigmoid_focal_loss
 from torch.nn.functional import one_hot
 from train_args import parse_arguments
 
@@ -121,6 +122,7 @@ def additional_info(*parameters_to_process:tuple[str,any]) -> str:
         ("USE_TRANSFORMER", USE_TRANSFORMER),
         ("CONCAT", CONCAT),
         ("USE_STANDARD_PROPAGATOR", USE_STANDARD_PROPAGATOR),
+        ('NUM_LAYERS', NUM_LAYERS),
         ("USE_GRU", USE_GRU)
     ]
     list_to_print.extend(parameters_to_process)
@@ -155,7 +157,11 @@ def train_or_eval(data_loader:DataLoader, model:SGLCModel_classification, optimi
     is_training = optimizer is not None
     model.train(is_training)
     
-    pos_weight= torch.Tensor([NUM_NOT_SEIZURE_DATA / NUM_SEIZURE_DATA]).to(device=DEVICE)
+    # pos_weight= torch.Tensor([NUM_NOT_SEIZURE_DATA / NUM_SEIZURE_DATA]).to(device=DEVICE)
+    
+    alpha = NUM_NOT_SEIZURE_DATA / (NUM_SEIZURE_DATA+NUM_NOT_SEIZURE_DATA)      # high weight for positive class (should be about 0.97)
+    gamma = 2.0                                                                 # more focus on hard examples (from 1.0 to 3.0)
+    LOGGER.info("Using alpha {:.3f} and gamma {:.3f}".format(alpha, gamma))
     
     # init metrics
     average_total= Average_Meter("total")
@@ -183,7 +189,8 @@ def train_or_eval(data_loader:DataLoader, model:SGLCModel_classification, optimi
             target_one_hot= one_hot(target.squeeze(-1).to(dtype=torch.int64), num_classes=NUM_CLASSES)
             target_one_hot= target_one_hot.to(dtype=target.dtype)
 
-            loss_pred= F.binary_cross_entropy_with_logits(result, target_one_hot, pos_weight=pos_weight, reduction="none").sum(dim=1)
+            #loss_pred= F.binary_cross_entropy_with_logits(result, target_one_hot, pos_weight=pos_weight, reduction="none").sum(dim=1)
+            loss_pred = sigmoid_focal_loss(inputs=result, targets=target_one_hot, alpha=alpha, gamma=gamma, reduction='none').sum(dim=1)
             
             loss_smooth= smoothness_loss_func(node_matrix_for_smooth, adj_matrix)
             loss_degree= degree_regularization_loss_func(adj_matrix)
@@ -330,7 +337,7 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
 def main():
     # take input from command line
     input_dir, files_record, method, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    string_additional_info= additional_info(('scaler', scaler))
+    string_additional_info= additional_info(('scaler', scaler), ('method', method))
     string= "{}{}".format("\n\t", "\n\t".join([item for item in string_additional_info.split("\n")]))
     LOGGER.info(string)
     
@@ -443,6 +450,7 @@ def main():
             use_Transformer=USE_TRANSFORMER,
             concat=CONCAT,
             use_propagator=USE_STANDARD_PROPAGATOR,
+            num_layers=NUM_LAYERS,
             use_GRU= USE_GRU,
             
             device= DEVICE

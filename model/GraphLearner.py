@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-
 import warnings
-from utils.constants_eeg import INF
+try:
+    from utils.constants_eeg import INF
+except ModuleNotFoundError:
+    INF = 1e20
 
 from torch_geometric.nn import GAT
 from torch_geometric.nn.conv import TransformerConv
@@ -24,9 +26,9 @@ class GraphLearner(nn.Module):
             num_heads (int):        Number of heads for multi-head attention
             
             use_GATv2 (bool):       Use GATV2 instead of GAT for the multi-head attention
-            num_layers (int):       Used only if `use_Transformer` is False. Number of message passing layers in the GAT module
+            num_layers (int):       Number of message passing layers in the GAT or Transformer module
             
-            use_Transformer (bool): Use `TransformerConv` for multi-head attention instead of GAT. If True the parameter `use_GATv2` and `num_layers` are ignored
+            use_Transformer (bool): Use `TransformerConv` for multi-head attention instead of GAT. If True the parameter `use_GATv2` is ignored
             concat (bool):          Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
             beta (bool):            Used only if `use_Transformer` is True. If True will combine aggregation and skip information
             
@@ -36,30 +38,22 @@ class GraphLearner(nn.Module):
         """
         super(GraphLearner, self).__init__()
         self.epsilon = epsilon
+        if (num_layers < 1):
+            raise ValueError("Number of layer less than 1")
         
         if use_Transformer:
             if concat:
                 for curr_num_heads in range(num_heads, 0, -1):
                     if (num_nodes % curr_num_heads == 0):
                         if (curr_num_heads != num_heads):
-                            msg= "The number of heads in reduced from ({}) to ({}) because concat is True, otherwise the output it would have been ({}) instead of ({})".format(num_heads, curr_num_heads, num_heads * (num_nodes//num_heads), num_nodes)
+                            msg = "concat is True, the number of heads is reduced from ({}) to ({}), otherwise the output would have been ({}) instead of ({})".format(num_heads, curr_num_heads, num_heads * (num_nodes//num_heads), num_nodes)
                             warnings.warn(msg)
-                            num_heads= curr_num_heads
+                            num_heads = curr_num_heads
                             break
-            
-            out_channels= num_nodes//num_heads if concat else num_nodes
-            self.att= TransformerConv(
-                in_channels=input_size,
-                out_channels=out_channels,
-                heads=num_heads,
-                concat=concat,
-                beta=beta,
-                dropout=dropout,
-                edge_dim=1
-            ).to(device=device)
-        
+
+            self.att = self._build_transformers(input_size, hidden_size, num_nodes, num_heads, num_layers, concat, beta, dropout, device)
         else:
-            self.att= GAT(
+            self.att = GAT(
                 in_channels=input_size,
                 hidden_channels=hidden_size,
                 num_layers=num_layers,
@@ -73,7 +67,73 @@ class GraphLearner(nn.Module):
         for param in self.att.parameters():
             if param.dim() > 1:
                 nn.init.xavier_uniform_(param)
-    
+
+    def _build_transformers(self, input_size:int, hidden_size:int, num_nodes:int, num_heads:int, num_layers:int, concat:bool, beta:bool, dropout:float, device:str) -> nn.ModuleList:
+        """Builds a stack of TransformerConv layers based on the GAT pattern"""
+        layers = nn.ModuleList()
+        out_channels = hidden_size//num_heads if concat else hidden_size
+        
+        if concat:
+            for curr_hidden_size in range(hidden_size, 0, -1):
+                if (curr_hidden_size % num_heads == 0):
+                    if (curr_hidden_size != hidden_size):
+                        msg = "concat is True, hidden size is reduced from ({}) to ({}) because it was not divisible by the number of heads ({})".format(hidden_size, curr_hidden_size, num_heads)
+                        warnings.warn(msg)
+                        hidden_size = curr_hidden_size
+                        break    
+        
+        # First layer
+        block = nn.ModuleList()
+        block.append(
+            TransformerConv(
+                in_channels  = input_size,
+                out_channels = out_channels,
+                heads        = num_heads,
+                concat       = concat,
+                beta         = beta,
+                dropout      = dropout,
+                edge_dim     = 1
+            )
+        )
+        if (num_layers > 1):
+            block.append( nn.ReLU(inplace=True) )
+            block.append( nn.Dropout(p=dropout) )
+        layers.append(block)
+        
+        # Intermediate layers
+        for _ in range(num_layers-1):
+            block= nn.ModuleList([
+                TransformerConv(
+                    in_channels  = hidden_size,
+                    out_channels = out_channels,
+                    heads        = num_heads,
+                    concat       = concat,
+                    beta         = beta,
+                    dropout      = dropout,
+                    edge_dim     = 1
+                ),
+                nn.ReLU(inplace=True),
+                nn.Dropout(p=dropout)
+            ])
+            layers.append(block)
+        
+        # Last layer
+        if (num_layers > 1):
+            block = nn.ModuleList([
+                TransformerConv(
+                    in_channels  = hidden_size,
+                    out_channels = num_nodes//num_heads if concat else num_nodes,
+                    heads        = num_heads,
+                    concat       = concat,
+                    beta         = beta,
+                    dropout      = dropout,
+                    edge_dim     = 1
+                )
+            ])
+            layers.append(block)
+            
+        return layers.to(device=device)
+
     def forward(self, context:Tensor, adj:Tensor) -> Tensor:
         """
         Compute the attention scores for each head and for each batch by:
@@ -110,18 +170,29 @@ class GraphLearner(nn.Module):
         # Concatenate all graphs
         x_batched = torch.cat(x_list, dim=0)                                    # (batch_size * num_nodes, input_size)
         edge_index_batched = torch.cat(edge_index_list, dim=1)                  # (2, total_edges)
-        edge_attr_batched = torch.cat(edge_attr_list, dim=0).unsqueeze(-1)       # (total_edges, 1)
+        edge_attr_batched = torch.cat(edge_attr_list, dim=0).unsqueeze(-1)      # (total_edges, 1)
         
-        attention_batched = self.att.forward(x_batched, edge_index_batched, edge_attr=edge_attr_batched)
+        layer:nn.Module= None
+        if isinstance(self.att, nn.ModuleList):
+            attention_batched = x_batched
+            for block in self.att:
+                transformer:TransformerConv = block[0]
+                attention_batched = transformer.forward(attention_batched, edge_index_batched, edge_attr=edge_attr_batched)
+                
+                for layer in block[1:]:
+                    attention_batched = layer.forward(attention_batched)
+        
+        else:
+            attention_batched = self.att.forward(x_batched, edge_index_batched, edge_attr=edge_attr_batched)
         
         # Reshape (batch_size * num_nodes, num_nodes) --> (batch_size, num_nodes, num_nodes)
         attention = attention_batched.reshape(batch_size, num_nodes, -1)
 
         # Modify the attention matrix by setting values below epsilon to a marker
         if self.epsilon is not None:
-            mask= (attention > self.epsilon).detach().float()
-            attention= torch.where(mask==1, attention, -INF)
+            mask = (attention > self.epsilon).detach().float()
+            attention = torch.where(mask==1, attention, -INF)
 
-        attention= F.sigmoid(attention)
+        attention = torch.sigmoid(attention)
 
         return attention

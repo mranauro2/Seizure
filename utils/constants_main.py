@@ -42,7 +42,7 @@ PERCENTAGE_BOTH_CLASS_IN_BATCH= 2
 BATCH_SIZE= 64
 """Batch size used during the training. The last batch can have different size"""
 
-NUM_WORKERS= 12
+NUM_WORKERS= 16
 """How many subprocesses to use for data loading"""
 
 RANDOM_STATE= 13
