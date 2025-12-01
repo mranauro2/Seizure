@@ -138,6 +138,7 @@ def additional_info(*parameters_to_process:tuple[str,any]) -> str:
 # TRAINING & EVALUATION
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+ALPHA_PRINT_INFO = False
 def train_or_eval(data_loader:DataLoader, model:SGLCModel_classification, optimizer:torch.optim.Optimizer, show_progress:bool=False, verbose:bool=False) -> list[tuple[str, float]]:
     """
     Unique function to train and evaluate the model. The operation is only one, so the training is for only one epoch.\\
@@ -161,7 +162,10 @@ def train_or_eval(data_loader:DataLoader, model:SGLCModel_classification, optimi
     
     alpha = NUM_NOT_SEIZURE_DATA / (NUM_SEIZURE_DATA+NUM_NOT_SEIZURE_DATA)      # high weight for positive class (should be about 0.97)
     gamma = 2.0                                                                 # more focus on hard examples (from 1.0 to 3.0)
-    LOGGER.info("Using alpha {:.3f} and gamma {:.3f}".format(alpha, gamma))
+    global ALPHA_PRINT_INFO
+    if not(ALPHA_PRINT_INFO):
+        LOGGER.info("Using alpha {:.3f} and gamma {:.3f}".format(alpha, gamma))
+        ALPHA_PRINT_INFO = True
     
     # init metrics
     average_total= Average_Meter("total")
@@ -457,9 +461,7 @@ def main():
         )    
     
     # set the number of seizure and not seizure data
-    seizure_bool_array= np.array([tuple_item[-1] for tuple_item in dataset.file_info], dtype=np.int32)      # tuple_item[-1] is has_seizure variable
-    NUM_NOT_SEIZURE_DATA= np.count_nonzero(seizure_bool_array)
-    NUM_SEIZURE_DATA = len(seizure_bool_array)-np.count_nonzero(seizure_bool_array)
+    NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = pos_neg_samples(train_dict)
     if do_train and (NUM_NOT_SEIZURE_DATA==0):
         raise ValueError(f"Training aborted, no data without seizure")
     if do_train and (NUM_SEIZURE_DATA==0):

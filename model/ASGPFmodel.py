@@ -320,15 +320,16 @@ if __name__=="__main__":
     num_cells       = 2
     input_dim       = 256//2
     num_nodes       = 21
-    hidden_dim_GL   = 128
+    hidden_dim_GL   = 192
     hidden_dim_GGNN = 256
     dropout         = 0.5
     num_heads       = 8
     use_GATv2       = False
-    use_Transformer = True
+    use_Transformer = False
     concat          = True
+    num_layers      = 3
     use_propagator  = False
-    use_GRU         = False
+    use_GRU         = True
     
     model= SGLCModel_classification(
         num_classes     = num_classes,
@@ -354,3 +355,18 @@ if __name__=="__main__":
     
     print(f"Total size model : {count_parameters(model):,}")
     print(f"\nUsing parametrs:\n{string}")
+    
+    print()
+    
+    from torchinfo import summary
+    BATCH_SIZE= 64
+    SEQ_LEN= 4
+    summary(model, 
+        input_data={
+            'input_seq': torch.rand((BATCH_SIZE, SEQ_LEN, num_nodes, input_dim)),
+            'supports': torch.rand((BATCH_SIZE, num_nodes, num_nodes))
+        },
+        depth=1,  # Shows more detailed structure
+        col_names=['input_size', 'output_size', 'num_params', 'trainable'],
+        verbose=1
+    )
