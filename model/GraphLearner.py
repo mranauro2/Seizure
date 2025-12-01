@@ -42,7 +42,8 @@ class GraphLearner(nn.Module):
                 for curr_num_heads in range(num_heads, 0, -1):
                     if (num_nodes % curr_num_heads == 0):
                         if (curr_num_heads != num_heads):
-                            warnings.warn("The number of heads in reduced from ({}) to ({}) because concat is True, otherwise the output it would have been ({}) instead of ({})".format(num_heads, curr_num_heads, num_heads * (num_nodes//num_heads), num_nodes))
+                            msg= "The number of heads in reduced from ({}) to ({}) because concat is True, otherwise the output it would have been ({}) instead of ({})".format(num_heads, curr_num_heads, num_heads * (num_nodes//num_heads), num_nodes)
+                            warnings.warn(msg)
                             num_heads= curr_num_heads
                             break
             
@@ -107,9 +108,9 @@ class GraphLearner(nn.Module):
             edge_attr_list.append(edge_attr)
         
         # Concatenate all graphs
-        x_batched = torch.cat(x_list, dim=0)                        # (batch_size * num_nodes, input_size)
-        edge_index_batched = torch.cat(edge_index_list, dim=1)      # (2, total_edges)
-        edge_attr_batched = torch.cat(edge_attr_list, dim=0)        # (total_edges, 1)
+        x_batched = torch.cat(x_list, dim=0)                                    # (batch_size * num_nodes, input_size)
+        edge_index_batched = torch.cat(edge_index_list, dim=1)                  # (2, total_edges)
+        edge_attr_batched = torch.cat(edge_attr_list, dim=0).unsqueeze(-1)       # (total_edges, 1)
         
         attention_batched = self.att.forward(x_batched, edge_index_batched, edge_attr=edge_attr_batched)
         
