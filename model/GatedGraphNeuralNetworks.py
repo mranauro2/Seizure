@@ -67,15 +67,16 @@ class GGNNLayer(nn.Module):
     """
     Gated Graph Neural Networks (GGNN) Layer for learning the feature/node matrix
     """
-    def __init__(self, input_dim:int, num_nodes:int, output_dim:int, num_steps:int, device:str=None):
+    def __init__(self, input_dim:int, num_nodes:int, output_dim:int, num_steps:int, use_propagator:bool=True, device:str=None):
         """
         Use iterative propagation with the GRU mechanism to learn a new representation of the feature/node matrix.
         Args:
-            input_dim (int):    Dimension of input node features
-            num_nodes (int):    Number of nodes in both input graph and hidden state
-            output_dim (int):   Dimension chosen for the output of the new feature/node matrix
-            num_steps (int):    Number of propagation iterations
-            device (str):       Device to place the model on
+            input_dim (int):        Dimension of input node features
+            num_nodes (int):        Number of nodes in both input graph and hidden state
+            output_dim (int):       Dimension chosen for the output of the new feature/node matrix
+            num_steps (int):        Number of propagation iterations
+            use_propagator (bool):  Use standard propagator module instead of GRU module
+            device (str):           Device to place the model on
         """
         super(GGNNLayer, self).__init__()
         self.input_dim = input_dim
@@ -83,7 +84,15 @@ class GGNNLayer(nn.Module):
         self.output_dim = output_dim
         self.num_steps = num_steps
 
-        self.propagator = Propogator(input_dim, device=device)
+        self.use_GRU = not(use_propagator)
+        if use_propagator:
+            self.propagator = Propogator(input_dim, device=device)
+        else:
+            self.propagator = nn.GRUCell(
+                input_size = 2*input_dim,
+                hidden_size = input_dim,
+                device = device
+            )
         self.fc = nn.Linear(input_dim, output_dim, device=device)
 
     def forward(self, inputs:Tensor, supports:Tensor) -> Tensor:
@@ -104,9 +113,24 @@ class GGNNLayer(nn.Module):
         inputs = inputs.reshape(batch_size, self.num_nodes, self.input_dim)
 
         x = inputs
+        
+        if self.use_GRU:
+            x = x.reshape(batch_size*self.num_nodes, self.input_dim)            # x in 2D
+            for _ in range(self.num_steps):
+                x_3D = x.reshape(batch_size, self.num_nodes, self.input_dim)
+                
+                a_in =  torch.matmul(supports, x_3D)
+                a_out = torch.matmul(supports.transpose(1, 2), x_3D)            # transposing to obtain a new (batch_size, num_nodes, num_nodes) matrix
+                a = torch.cat((a_in, a_out), dim=2)
+                a = a.reshape(batch_size*self.num_nodes, 2*self.input_dim)      # a in 2D
+                
+                x = self.propagator.forward(a, x)
 
-        for _ in range(self.num_steps):
-            x = self.propagator.forward(x, supports)
+            x = x.reshape(batch_size, self.num_nodes, self.input_dim)           # x in 3D
+            
+        else:
+            for _ in range(self.num_steps):
+                x = self.propagator.forward(x, supports)
 
         # (batch_size, num_nodes, output_dim)
         x:Tensor = self.fc(x)  

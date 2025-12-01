@@ -62,7 +62,7 @@ HIDDEN_DIM_GL= 128
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Hidden dimension for the :data:`model.GraphLearner.GraphLearner` module"""
 
-HIDDEN_DIM_GGNN= 192
+HIDDEN_DIM_GGNN= 256
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Hidden dimension in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
@@ -88,15 +88,19 @@ Number of propagation steps in the :data:`model.GatedGraphNeuralNetworks.GGNNLay
 
 USE_GATv2= False
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
-Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
-USE_TRANSFORMER= True
+USE_TRANSFORMER= False
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
-Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
 CONCAT= True
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
-Used only if `use_Transformer` is True. Concatenate (True) or average (False) the multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+Used only if `use_Transformer` is True. Concatenate (True) or average (False) the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
+
+USE_STANDARD_PROPAGATOR= True
+"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+Use standard propagator module instead of GRU module in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
 USE_GRU= False
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\

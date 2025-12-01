@@ -120,6 +120,7 @@ def additional_info(*parameters_to_process:tuple[str,any]) -> str:
         ("USE_GATv2", USE_GATv2),
         ("USE_TRANSFORMER", USE_TRANSFORMER),
         ("CONCAT", CONCAT),
+        ("USE_STANDARD_PROPAGATOR", USE_STANDARD_PROPAGATOR),
         ("USE_GRU", USE_GRU)
     ]
     list_to_print.extend(parameters_to_process)
@@ -328,7 +329,7 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
 
 def main():
     # take input from command line
-    input_dir, files_record, method, scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
+    input_dir, files_record, method, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
     string_additional_info= additional_info(('scaler', scaler))
     string= "{}{}".format("\n\t", "\n\t".join([item for item in string_additional_info.split("\n")]))
     LOGGER.info(string)
@@ -363,7 +364,7 @@ def main():
     # generating new scaler
     if (scaler is not None):
         LOGGER.info(f"Loading scaler '{scaler}'...")
-        scaler_name= "{}_{}.{}".format(scaler, scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
+        scaler_name= "{}{}_{}.{}".format(scaler, '_single' if single_scaler else "",scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
         scaler_path= os.path.join(SCALER_SAVE_FOLDER, scaler_name)
         if  (scaler=='z-score'):
             scaler= StandardScaler()
@@ -376,7 +377,7 @@ def main():
         if os.path.exists(scaler_path):
             scaler= scaler.load(scaler_path, device=DEVICE)
         else:
-            scaler.fit(trian_set, func_operation=func_operation, use_tqdm=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+            scaler.fit(trian_set, single_value=single_scaler, func_operation=func_operation, use_tqdm=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
             scaler.save(scaler_path)
         dataset.scaler= scaler
     
@@ -441,6 +442,7 @@ def main():
             use_GATv2= USE_GATv2,
             use_Transformer=USE_TRANSFORMER,
             concat=CONCAT,
+            use_propagator=USE_STANDARD_PROPAGATOR,
             use_GRU= USE_GRU,
             
             device= DEVICE

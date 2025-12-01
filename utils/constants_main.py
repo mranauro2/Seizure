@@ -36,13 +36,13 @@ TEST_PATIENT_IDS= ["chb05"]
 PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""
 
-PERCENTAGE_BOTH_CLASS_IN_BATCH= 20
+PERCENTAGE_BOTH_CLASS_IN_BATCH= 2
 """Min percentage number of both class in a batch"""
 
-BATCH_SIZE= 96
+BATCH_SIZE= 64
 """Batch size used during the training. The last batch can have different size"""
 
-NUM_WORKERS= 16
+NUM_WORKERS= 12
 """How many subprocesses to use for data loading"""
 
 RANDOM_STATE= 13
@@ -52,7 +52,7 @@ RANDOM_STATE= 13
 # OTHERS INFO
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-LEARNING_RATE= 5e-5
+LEARNING_RATE= 1e-5
 """Learning rate of the model"""
 
 BEST_K_MODELS= 0
