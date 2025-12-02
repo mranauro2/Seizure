@@ -52,13 +52,13 @@ RANDOM_STATE= 13
 # OTHERS INFO
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-LEARNING_RATE= 5e-6
+LEARNING_RATE= 1e-6
 """Learning rate of the model"""
 
-FOCAL_LOSS_APLHA= None
+FOCAL_LOSS_APLHA= 0.99
 """Weighting factor in range [0, 1] to balance positive vs negative examples. High weight for positive class. If None are set the default"""
 
-FOCAL_LOSS_GAMMA= 1.5
+FOCAL_LOSS_GAMMA= 2.0
 """Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples. Higher is more focus on hard examples. If None are set the default"""
 
 BEST_K_MODELS= 0
