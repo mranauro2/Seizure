@@ -62,7 +62,7 @@ HIDDEN_DIM_GL= 192
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Hidden dimension for the :data:`model.GraphLearner.GraphLearner` module"""
 
-HIDDEN_DIM_GGNN= 256
+HIDDEN_DIM_GGNN= 192
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Hidden dimension in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
@@ -70,7 +70,7 @@ GRAPH_SKIP_CONN= 0.3
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Skip connection weight for adjacency updates"""
 
-DROPOUT= 0.5
+DROPOUT= 0.4
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Dropout probability applied in the attention layer for the :data:`model.GraphLearner.GraphLearner` module"""
 
@@ -82,7 +82,7 @@ NUM_HEADS= 8
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Number of heads for multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
-NUM_STEPS= 5
+NUM_STEPS= 6
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Number of propagation steps in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
@@ -102,11 +102,11 @@ NUM_LAYERS= 3
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Number of message passing layers in the GAT or Transformer module for the :data:`model.GraphLearner.GraphLearner` module"""
 
-USE_STANDARD_PROPAGATOR= False
+USE_STANDARD_PROPAGATOR= True
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use standard propagator module instead of GRU module in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
-USE_GRU= False
+USE_GRU= True
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use GRU module and hidden state in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
