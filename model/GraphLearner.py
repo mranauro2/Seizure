@@ -16,7 +16,7 @@ class GraphLearner(nn.Module):
     """
     Graph learning layer that computes a new learned adjacency matrix
     """
-    def __init__(self, input_size:int, hidden_size:int, num_nodes:int=21, num_heads:int=16, use_GATv2:bool=False, num_layers:int=3, use_Transformer:bool=False, concat:bool=False, beta:bool=False, dropout:float=0.5, epsilon:float=None, device:str=None):
+    def __init__(self, input_size:int, hidden_size:int, num_nodes:int=21, num_heads:int=16, use_GATv2:bool=False, num_layers:int=3, use_Transformer:bool=False, concat:bool=False, beta:bool=True, dropout:float=0.5, epsilon:float=None, device:str=None):
         """
         Use the multi-head GAT layers to learn a new representation of the adjacency matrix.
         Args:
@@ -97,7 +97,6 @@ class GraphLearner(nn.Module):
         )
         if (num_layers > 1):
             block.append( nn.ReLU(inplace=True) )
-            block.append( nn.Dropout(p=dropout) )
         layers.append(block)
         
         # Intermediate layers
@@ -112,8 +111,7 @@ class GraphLearner(nn.Module):
                     dropout      = dropout,
                     edge_dim     = 1
                 ),
-                nn.ReLU(inplace=True),
-                nn.Dropout(p=dropout)
+                nn.ReLU(inplace=True)
             ])
             layers.append(block)
         
