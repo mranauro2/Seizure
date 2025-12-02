@@ -321,14 +321,14 @@ if __name__=="__main__":
     input_dim       = 256//2
     num_nodes       = 21
     hidden_dim_GL   = 192
-    hidden_dim_GGNN = 256
+    hidden_dim_GGNN = 192
     dropout         = 0.5
     num_heads       = 8
     use_GATv2       = False
-    use_Transformer = False
+    use_Transformer = True
     concat          = True
     num_layers      = 3
-    use_propagator  = False
+    use_propagator  = True
     use_GRU         = True
     
     model= SGLCModel_classification(
