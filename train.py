@@ -160,9 +160,8 @@ def train_or_eval(data_loader:DataLoader, model:SGLCModel_classification, optimi
     
     # pos_weight= torch.Tensor([NUM_NOT_SEIZURE_DATA / NUM_SEIZURE_DATA]).to(device=DEVICE)
     
-    alpha = NUM_NOT_SEIZURE_DATA / (NUM_SEIZURE_DATA+NUM_NOT_SEIZURE_DATA)      # high weight for positive class (should be about 0.97)
-    alpha = 0.99
-    gamma = 2.0                                                                 # more focus on hard examples (from 1.0 to 3.0)
+    alpha = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else NUM_NOT_SEIZURE_DATA / (NUM_SEIZURE_DATA+NUM_NOT_SEIZURE_DATA)
+    gamma = FOCAL_LOSS_GAMMA if (FOCAL_LOSS_GAMMA is not None) else 1.0
     global ALPHA_PRINT_INFO
     if not(ALPHA_PRINT_INFO):
         LOGGER.info("Using alpha {:.3f} and gamma {:.3f}".format(alpha, gamma))

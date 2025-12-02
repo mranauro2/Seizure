@@ -78,7 +78,7 @@ class Metrics():
         return train_metric, val_metric, test_metric
     
     @staticmethod
-    def plot(train_metric:np.ndarray=None, val_metric:np.ndarray=None, test_metric:np.ndarray=None, metric_name:str="Metric", marker:bool=False, show:str='none', start_check:int|float=0.2, best_k:int=3, higher_is_better:bool=False):
+    def plot(train_metric:np.ndarray=None, val_metric:np.ndarray=None, test_metric:np.ndarray=None, metric_name:str="Metric", marker:bool=False, show:str|int|list[int]='none', start_check:int|float=0.2, best_k:int=3, higher_is_better:bool=False):
         """
         Plot the metrics on the same figure
 
@@ -88,7 +88,8 @@ class Metrics():
             test_metric (np.ndarray):   Array with the datas about testing metrics. If None an empty array will be saved
             metric_name (str):          Title of the plot
             marker (bool):              Use a marker to highlight the points
-            show (str):                 There are different choises:
+            show (str|int|list[int]):   If it is a int or list of int use 'points' with the integer passed instead of the best K. <br>
+                                        There are different choises if it is a string: <br>
                                         - if 'none' the train will not be show
                                         - if 'full' show full train
                                         - if 'points' show test metric for best K min/max validation values
@@ -102,7 +103,7 @@ class Metrics():
         test_metric=    test_metric     if (test_metric is not None)    else np.full(0, np.nan, dtype=np.int8)
         
         possibilities= ['full', 'points', 'both', 'none']
-        if show not in possibilities:
+        if isinstance(show, str) and (show not in possibilities):
             raise ValueError("show '{}' not exists, choose between '{}'".format(show, "', '".join(possibilities)))
         
         if isinstance(start_check, float):
@@ -119,6 +120,13 @@ class Metrics():
         val_ascending_indeces= np.argsort(val_metric[start_check:]) + start_check
         best_k_indeces= val_ascending_indeces[-best_k:] if higher_is_better else val_ascending_indeces[:best_k]
         
+        if isinstance(show, int):
+            best_k_indeces = np.array([show])
+            show = 'points'
+        if isinstance(show, list) and isinstance(show[0], int):
+            best_k_indeces = np.array(show)
+            show = 'points'
+        
         _= plt.plot(train_metric, label="train", marker=marker)
         _= plt.plot(val_metric, label="val", marker=marker)
         
@@ -129,7 +137,7 @@ class Metrics():
         if (show in ['points', 'both']):
             _= plt.plot(best_k_indeces, test_metric[best_k_indeces], label="test values", marker='o', linestyle="None", color=color)
             
-            ymin, _ = plt.get_ylim()
+            ymin, _ = plt.ylim()
             plt.vlines(x=best_k_indeces, ymin=ymin, ymax=test_metric[best_k_indeces], colors='gray', linestyles='--')
 
             vertical_offset= 10 if higher_is_better else -15

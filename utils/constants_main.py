@@ -36,7 +36,7 @@ TEST_PATIENT_IDS= ["chb02"]
 PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""
 
-PERCENTAGE_BOTH_CLASS_IN_BATCH= 3
+PERCENTAGE_BOTH_CLASS_IN_BATCH= 1
 """Min percentage number of both class in a batch"""
 
 BATCH_SIZE= 64
@@ -54,6 +54,12 @@ RANDOM_STATE= 13
 
 LEARNING_RATE= 5e-6
 """Learning rate of the model"""
+
+FOCAL_LOSS_APLHA= None
+"""Weighting factor in range [0, 1] to balance positive vs negative examples. High weight for positive class. If None are set the default"""
+
+FOCAL_LOSS_GAMMA= 1.5
+"""Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples. Higher is more focus on hard examples. If None are set the default"""
 
 BEST_K_MODELS= 0
 """Maximum number of model maintained as best model in performance"""
