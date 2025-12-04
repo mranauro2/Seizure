@@ -67,7 +67,7 @@ class GGNNLayer(nn.Module):
     """
     Gated Graph Neural Networks (GGNN) Layer for learning the feature/node matrix
     """
-    def __init__(self, input_dim:int, num_nodes:int, output_dim:int, num_steps:int, use_propagator:bool=True, device:str=None):
+    def __init__(self, input_dim:int, num_nodes:int, output_dim:int, num_steps:int, use_GRU:bool=True, device:str=None):
         """
         Use iterative propagation with the GRU mechanism to learn a new representation of the feature/node matrix.
         Args:
@@ -75,7 +75,7 @@ class GGNNLayer(nn.Module):
             num_nodes (int):        Number of nodes in both input graph and hidden state
             output_dim (int):       Dimension chosen for the output of the new feature/node matrix
             num_steps (int):        Number of propagation iterations
-            use_propagator (bool):  Use standard propagator module instead of GRU module
+            use_GRU (bool):         Use the GRU module instead of the standard propagator
             device (str):           Device to place the model on
         """
         super(GGNNLayer, self).__init__()
@@ -83,16 +83,17 @@ class GGNNLayer(nn.Module):
         self.num_nodes = num_nodes
         self.output_dim = output_dim
         self.num_steps = num_steps
+        self.use_GRU= use_GRU
 
-        self.use_GRU = not(use_propagator)
-        if use_propagator:
-            self.propagator = Propogator(input_dim, device=device)
-        else:
+        if use_GRU:
             self.propagator = nn.GRUCell(
                 input_size = 2*input_dim,
                 hidden_size = input_dim,
                 device = device
             )
+        else:
+            self.propagator = Propogator(input_dim, device=device)
+
         self.fc = nn.Linear(input_dim, output_dim, device=device)
 
     def forward(self, inputs:Tensor, supports:Tensor) -> Tensor:

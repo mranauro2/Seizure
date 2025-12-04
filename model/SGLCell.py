@@ -2,42 +2,59 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-try:
-    from model.GraphLearner import GraphLearner
-    from model.GatedGraphNeuralNetworks import GGNNLayer
-except ModuleNotFoundError:
-    from GraphLearner import GraphLearner
-    from GatedGraphNeuralNetworks import GGNNLayer
+from model.GatedGraphNeuralNetworks import GGNNLayer
+from model.GraphLearner.GraphLearner import GraphLearner
+from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 
 class SGLC_Cell(nn.Module):
     """
     Spatio-Graph Learning Cell (SGLC) with Graph Learner, the Gated Graph Neural Networks and the GRU module
     """
-    def __init__(self, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, num_layers:int=3, use_propagator:bool=True, use_GRU:bool=False, device:str=None):
+    def __init__(
+            self,
+            input_dim:int,
+            num_nodes:int,
+            
+            graph_skip_conn:float=0.3,
+            use_GRU:bool=False,
+            
+            hidden_dim_GL:int=100,
+            attention_type:GraphLearnerAttention=GraphLearnerAttention.TRANSFORMER_CONV,
+            num_layers:int=3,
+            num_heads:int=8,
+            dropout:float=0.0,
+            epsilon:float=None,
+            
+            hidden_dim_GGNN:int=None,
+            num_steps:int=5,
+            use_GRU_in_GGNN:bool=False,
+            
+            device:str=None,
+            **kwargs
+        ):
         """
         Use the Graph Learner, the Gated Graph Neural Networks and the GRU module to obtain new representations
         
         Args:
-            input_dim (int):            Feature dimension of input nodes
-            num_nodes (int):            Number of nodes in both input graph and hidden state
+            input_dim (int):                        Feature dimension of input nodes
+            num_nodes (int):                        Number of nodes in both input graph and hidden state
             
-            hidden_dim_GL (int):        Hidden dimension for Graph Learner module
-            hidden_dim_GGNN (int):      Hidden dimension of the hidden state for Gated Graph Neural Networks module (only if `use_GRU` is True)
+            graph_skip_conn (float):                Skip connection weight for adjacency matrix updates
+            use_GRU (bool):                         Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
-            graph_skip_conn (float):    Skip connection weight for adjacency matrix updates
+            hidden_dim_GL (int):                    Hidden dimension for Graph Learner module
+            attention_type (GraphLearnerAttention): Type of attention used for the Graph Learner module
+            num_layers (int):                       Number of message passing layers in the GAT or Transformer module for the Graph Learner module
+            num_heads (int):                        Number of heads for multi-head attention in the Graph Learner module
+            dropout (float):                        Dropout probability applied in the attention layer of the Graph Learner module
+            epsilon (float):                        Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
             
-            dropout (float):            Dropout probability applied in the attention layer of the Graph Learner module
-            epsilon (float):            Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
-            num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
-            num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
-            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Graph Learner module
-            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Graph Learner module. If True the parameter `use_GATv2` is ignored
-            concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
-            num_layers (int):           Number of message passing layers in the GAT or Transformer module for the Graph Learner module
-            use_propagator (bool):      Use standard propagator module instead of GRU module in the Gated Graph Neural Networks module
-            use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
+            hidden_dim_GGNN (int):                  Hidden dimension of the hidden state for Gated Graph Neural Networks module (only if `use_GRU` is True)
+            num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
+            use_GRU_in_GGNN (bool):                 Use the GRU module instead of the standard propagator in the Gated Graph Neural Networks module
             
-            device (str):               Device to place the model on
+            device (str):                           Device to place the model on
+            **kwargs:                               Additional arguments of `GraphLearner`
         """
         super(SGLC_Cell, self).__init__()
         self._num_nodes = num_nodes
@@ -46,36 +63,38 @@ class SGLC_Cell(nn.Module):
         self.graph_skip_conn = graph_skip_conn
         
         if use_GRU and (hidden_dim_GGNN is None):
-            raise ValueError("hidden_dim_GGNN must be an int, actual 'None'")
+            raise ValueError("hidden_dim_GGNN must not None")
 
+        keys_graph_learner = ["act", "v2", "concat", "beta"]
+        kwargs_graph_learner = {key:value for key,value in kwargs.items() if key in keys_graph_learner}
         self.graph_learner = GraphLearner(
-            input_size=input_dim,
-            hidden_size=hidden_dim_GL,
-            num_nodes=num_nodes,
-            num_heads=num_heads,
-            use_GATv2=use_GATv2,
-            use_Transformer=use_Transformer,
-            concat=concat,
-            dropout=dropout,
-            epsilon=epsilon,
-            device=device
+            input_size  = input_dim,
+            hidden_size = hidden_dim_GL,
+            num_nodes   = num_nodes,
+            num_heads   = num_heads,
+            attention   = attention_type,
+            num_layers  = num_layers,
+            dropout     = dropout,
+            epsilon     = epsilon,
+            device      = device,
+            **kwargs_graph_learner
         )
         
         GGNN_input= (input_dim + hidden_dim_GGNN) if use_GRU else (input_dim)
         self.ggnn = GGNNLayer(
-            input_dim=GGNN_input,
-            num_nodes=num_nodes,
-            output_dim=input_dim,
-            num_steps=num_steps,
-            use_propagator=use_propagator,
-            device=device
+            input_dim   = GGNN_input,
+            num_nodes   = num_nodes,
+            output_dim  = input_dim,
+            num_steps   = num_steps,
+            use_GRU     = use_GRU_in_GGNN,
+            device      = device
         )
         
         if self.use_GRU:
             self.gru = nn.GRUCell(
-                input_size= num_nodes*input_dim,
-                hidden_size= num_nodes*hidden_dim_GGNN,
-                device=device
+                input_size  = num_nodes*input_dim,
+                hidden_size = num_nodes*hidden_dim_GGNN,
+                device      = device
             )
 
     def forward(self, inputs:Tensor, supports:Tensor, state:Tensor=None) -> tuple[Tensor, Tensor]|tuple[Tensor, Tensor, Tensor]:

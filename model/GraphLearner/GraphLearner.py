@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from utils.constant.constants_eeg import INF
 from model.EEGGraphAttentionLayer import EEGGraphAttentionLayer
+from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 
 from torch_geometric.nn import GAT
 from torch_geometric.utils import dense_to_sparse
@@ -10,22 +11,9 @@ from torch_geometric.nn.conv import TransformerConv
 from torch_geometric.nn.resolver import activation_resolver
 
 from torch import Tensor
-from enum import Enum, auto
 from typing import Callable
 
 import warnings
-
-class GraphLearnerAttention(Enum):
-    """Set the attention used in the `GraphLearner` class"""
-    GRAPH_ATTENTION_LAYER   = auto()
-    """Use a custom attention layer similato to `GAT`\\
-    Can be add the parameter `v2` in the `GraphLearner` class to choose if the logic must be of `GATv2Conv` rather than `GATConv`"""
-    GAT                     = auto()
-    """Use `GAT` attention from `torch_geometric.nn`\\
-    Can be add the parameter `v2` in the `GraphLearner` class to choose if use `GATv2Conv` rather than `GATConv`"""
-    TRANSFORMER_CONV        = auto()
-    """Use `TransformerConv` as attention from `torch_geometric.nn.conv`\\
-    Can be added the parameters `concat` to concatenate the multi-head attention and `beta` to combine aggregation and skip information"""
 
 class GraphLearner(nn.Module):
     """
@@ -80,7 +68,7 @@ class GraphLearner(nn.Module):
         
         # print warnings
         if not(attention==GraphLearnerAttention.GAT or attention==GraphLearnerAttention.GRAPH_ATTENTION_LAYER) and (v2==True):
-            msg = "The parameter v2 is ignored because the attention is not set {}".format(GraphLearnerAttention.GAT.name)
+            msg = "The parameter v2 is ignored because the attention is not set {} or {}".format(GraphLearnerAttention.GAT.name, GraphLearnerAttention.GRAPH_ATTENTION_LAYER.name)
             warnings.warn(msg)
         if not(attention==GraphLearnerAttention.TRANSFORMER_CONV):
             if (concat==True):
@@ -94,10 +82,13 @@ class GraphLearner(nn.Module):
         match self.attention_type:
             case GraphLearnerAttention.GRAPH_ATTENTION_LAYER:
                 self.att = self._build_graph_attention(input_size, hidden_size, num_layers, num_nodes, num_heads, dropout, act, v2, device=device)
+                self.forward = self._forward_graph_attention
             case GraphLearnerAttention.GAT:
                 self.att = self._build_gat(input_size, hidden_size, num_layers, num_nodes, num_heads, dropout, act, v2, device=device)
+                self.forward = self._forward_gat
             case GraphLearnerAttention.TRANSFORMER_CONV:
                 self.att = self._build_transformers(input_size, hidden_size, num_layers, num_nodes, num_heads, dropout, act, concat, beta, device=device)
+                self.forward = self._forward_transformer
             case _:
                 raise NotImplementedError("Attention {} is not implemented yet".format(self.attention_type))
         
@@ -224,18 +215,8 @@ class GraphLearner(nn.Module):
             :param context (Tensor):    Node features matrix with size (batch_size, num_nodes*input_size)
             :param adj (Tensor):        Adjacency matrix with size (batch_size, num_nodes, num_nodes)
             :return attention (Tensor): Adjacency attention matrix with size (batch_size, num_nodes, num_nodes)
-        """    
-        match self.attention_type:
-            case GraphLearnerAttention.GRAPH_ATTENTION_LAYER:
-                attention = self._forward_graph_attention(context, adj)
-            case GraphLearnerAttention.GAT:
-                attention = self._forward_gat(context, adj)
-            case GraphLearnerAttention.TRANSFORMER_CONV:
-                attention = self._forward_transformer(context, adj)
-            case _:
-                raise NotImplementedError("forward for {} is not implemented yet".format(self.attention_type))
-        
-        return attention
+        """
+        raise NotImplementedError("This function is only a decoration")
     
     def _forward_graph_attention(self, context:Tensor, adj:Tensor) -> Tensor:
         """

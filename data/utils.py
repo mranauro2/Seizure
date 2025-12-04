@@ -17,7 +17,7 @@ FREQUENCY_CHB_MIT= 256
 
 def normalize_laplacian_spectrum(adj_mx:np.ndarray, lambda_value:float=2) -> np.ndarray:
     """
-    Compute scaled Laplacian matrix for graph convolutional networks.\\
+    Compute Laplacian matrix for graph convolutional networks. It can also compute the scaled Laplacian matrix\\
     The scaled Laplacian is defined as:\\
     `(2 / lambda_max) * L - I`\\
     where:
@@ -26,16 +26,18 @@ def normalize_laplacian_spectrum(adj_mx:np.ndarray, lambda_value:float=2) -> np.
     
     Args:
         adj_mx (np.ndarray):        Adjacency matrix with shape (num_nodes, num_nodes)
-        lambda_value (float):       Maximum eigenvalue for scaling. If None, computed automatically
+        lambda_value (float):       Maximum eigenvalue for scaling. If negative, computed automatically, if None compute only the Laplacian matrix
     
     Returns:
         laplacian (np.ndarray):     Scaled Laplacian matrix with shape (num_nodes, num_nodes)
     """
     is_symmetric= np.allclose(adj_mx, adj_mx.T, rtol=1e-10, atol=1e-12)
-    
     L= laplacian(adj_mx, normed=True, symmetrized=(not is_symmetric))
     
-    lambda_value= lambda_value if lambda_value else linalg.eigsh(L, 1, which='LM', return_eigenvectors=False)[0]
+    if (lambda_value is None):
+        return L
+    
+    lambda_value= lambda_value if (lambda_value >= 0) else linalg.eigsh(L, 1, which='LM', return_eigenvectors=False)[0]
     lambda_value= max(lambda_value, 1e-8) # for numerical stability
 
     I = np.eye(L.shape[0])

@@ -11,10 +11,10 @@ from utils.constant.constants_eeg import *
 from utils.constant.constants_main import *
 from utils.classes.Metrics_classes import *
 from utils.classes.Metric_manager import Metrics
-from data.scaler import *
+from data.scaler.scaler import *
 from data.utils import *
 
-from data.dataloader import SeizureDataset, SeizureSampler
+from data.dataloader.dataloader import SeizureDataset, SeizureSampler
 
 from model.SGLCModel import SGLC_Classifier
 from model.loss_functions import *

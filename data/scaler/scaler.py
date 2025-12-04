@@ -5,9 +5,14 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm.auto import tqdm
 from typing import Callable
 from abc import ABC, abstractmethod
+from data.scaler.ScalerType import ScalerType
 
 import os
 import numpy as np
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# ABSTRACT CLASS
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class Scaler(ABC):
     """Abstract Scaler class to normalize the data"""
@@ -76,6 +81,31 @@ class Scaler(ABC):
             Scaler:         Loaded Scaler instance
         """
         return Scaler()
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# ABSTRACT FACTORY CLASS
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class ConcreteScaler():
+    """Abstract factory class to normalize the data"""
+    @staticmethod
+    def create_scaler(scaler_type:ScalerType, device:str=None):
+        """
+            :param scaler_type (ScalerType):    Type of scaler to generate
+            :param device (str):                Device where do computations on ('cuda', 'cpu', etc.)
+        """
+        match scaler_type:
+            case ScalerType.Z_SCORE:
+                return StandardScaler(device=device)
+            case ScalerType.MIN_MAX:
+                return MinMaxScaler(device=device)
+            case _:
+                raise NotImplementedError("Scaler {} is not implemented yet".format(scaler_type))
+                
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# CONCRETE CLASSES
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 class MinMaxScaler(Scaler):
     """MinMax scaler for normalizing tensor data"""

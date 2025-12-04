@@ -1,16 +1,32 @@
-import torch
 from torch.utils.data import Dataset, Sampler
+from torch import Tensor
+import torch
 
 from collections import defaultdict
 
-from data.scaler import Scaler
+from data.dataloader.SeizureDatasetMethod import SeizureDatasetMethod
+from data.scaler.scaler import Scaler
 
 import data.utils as utils
 import numpy as np
+import warnings
 import os
 
 class SeizureDataset(Dataset):
-    def __init__(self, input_dir:str=None, files_record:list[str]=None, time_step_size:int=1, max_seq_len:int=12, use_fft:bool=True, preprocess_data:str=None, scaler:Scaler=None, method:str="plv", top_k:int=None):
+    def __init__(
+            self,
+            input_dir:str=None,
+            files_record:list[str]=None,
+            time_step_size:int=1,
+            max_seq_len:int=12,
+            use_fft:bool=True,
+            preprocess_data:str=None,
+            scaler:Scaler=None,
+            method:SeizureDatasetMethod=SeizureDatasetMethod.CROSS,
+            top_k:int=None,
+            *,
+            lambda_value:float=None
+        ):
         """
         Args:
             input_dir (str):            Directory to data files
@@ -27,10 +43,14 @@ class SeizureDataset(Dataset):
             scaler (Scaler):            Scaler to normalize the data. It will be applied after the Fast Fourier Transform (if present) and before the computation of the adjacency matrix
             
             method (str):               How to compute the adjacency matrix
-                - `cross`: for the scaled Laplacian matrix of the normalized cross-correlation
-                - `plv`: for the Phase Locking Value
             top_k (int):                Maintain only the `top_k` higher value when compute the adjacency matrix
+            
+            lambda_value (float):       Maximum eigenvalue for scaling the Laplacian matrix. If negative, computed automatically, if None compute only the Laplacian matrix 
         """
+        if not(method==SeizureDatasetMethod.LAPLACIAN) and (lambda_value is not None):
+            msg = "The parameter lambda_value is ignored because the attention is not set {}".format(SeizureDatasetMethod.LAPLACIAN.name)
+            warnings.warn(msg)
+        
         self.input_dir = input_dir
         self.preprocess_data = preprocess_data
         
@@ -40,11 +60,19 @@ class SeizureDataset(Dataset):
         
         self._scaler= scaler
 
-        possibilities= ["cross", "plv"]
-        if method not in possibilities:
-            raise ValueError("Current method '{}' do not exists. Choose between: '{}'".format(method, "', '".join(possibilities)))
-        self.method= method
+        self.lambda_value= lambda_value
         self.top_k = top_k
+        
+        self.method= method
+        match self.method:
+            case SeizureDatasetMethod.CROSS:
+                self._compute_adj = self._compute_cross
+            case SeizureDatasetMethod.PLV:
+                self._compute_adj = self._compute_plv
+            case SeizureDatasetMethod.LAPLACIAN:
+                self._compute_adj = self._compute_laplacian
+            case _:
+                raise NotImplementedError("Method {} is not implemented yet".format(self.method))
         
         self.file_info= list()
         for file in files_record:
@@ -92,14 +120,19 @@ class SeizureDataset(Dataset):
         has_seizure:str=None
         
         with open(file, "r") as f:
-            for line in f.readlines():
-                patient_id, file_name, index, has_seizure = line.split(",")
-                data.append((
-                    patient_id.strip(),
-                    file_name.strip(),
-                    int(index.strip()),
-                    bool(int(has_seizure.strip()))
-                ))
+            try:
+                for line in f.readlines():
+                    patient_id, file_name, index, has_seizure = line.split(",")
+                    data.append((
+                        patient_id.strip(),
+                        file_name.strip(),
+                        int(index.strip()),
+                        bool(int(has_seizure.strip()))
+                    ))
+            except ValueError as e:
+                if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack"):
+                    e = ValueError("Expected format 'str, str, int, bool' for each line of file {}".format(file))
+                raise e
         
         return data
     
@@ -111,15 +144,32 @@ class SeizureDataset(Dataset):
         has_seizure:str=None
         
         with open(file, "r") as f:
-            for line in f.readlines():
-                patient_id, file_name, has_seizure = line.split(",")
-                data.append((
-                    patient_id.strip(),
-                    file_name.strip(),
-                    bool(int(has_seizure.strip()))
-                ))
+            try:
+                for line in f.readlines():
+                    patient_id, file_name, has_seizure = line.split(",")
+                    data.append((
+                        patient_id.strip(),
+                        file_name.strip(),
+                        bool(int(has_seizure.strip()))
+                    ))
+            except ValueError as e:
+                if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack"):
+                    e = ValueError("Expected format 'str, str, bool' for each line of file {}".format(file))
+                raise e
         
         return data
+
+    def _compute_cross(self, curr_feature:np.ndarray|Tensor):
+        return utils.cross_correlation(curr_feature, self.top_k)
+    
+    def _compute_plv(self, curr_feature:np.ndarray|Tensor):
+        curr_feature= curr_feature.numpy()
+        curr_feature= curr_feature.transpose((1,0,2)).reshape(curr_feature.shape[1], -1)
+        return utils.compute_plv_matrix(curr_feature)
+    
+    def _compute_laplacian(self, curr_feature:np.ndarray|Tensor):
+        adj_cross_corr = self._compute_cross(curr_feature)
+        return utils.normalize_laplacian_spectrum(adj_cross_corr, self.lambda_value)
 
     def __getitem__(self, index:int):
         """
@@ -156,17 +206,7 @@ class SeizureDataset(Dataset):
         if (self._scaler is not None):
             curr_feature= self._scaler.transform(curr_feature)
 
-        # generate adjacency matrix
-        if self.method=="cross":
-            adj_cross_corr = utils.cross_correlation(curr_feature, self.top_k)
-            adj = utils.normalize_laplacian_spectrum(adj_cross_corr)
-        elif self.method=="plv":
-            # from (clip_len, num_channels, feature_dim) to (num_channels, clip_len*feature_dim)
-            curr_feature= curr_feature.numpy()
-            curr_feature= curr_feature.transpose((1,0,2)).reshape(curr_feature.shape[1], -1)
-            adj= utils.compute_plv_matrix(curr_feature)
-        else:
-            raise NotImplementedError(f"Current method '{self.method}' not implemented yet")
+        adj = self._compute_adj(curr_feature)
         
         # transform in tensor all numpy arrays
         x = torch.FloatTensor(eeg_clip)

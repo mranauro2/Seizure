@@ -2,10 +2,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-try:
-    from model.SGLCell import SGLC_Cell
-except ModuleNotFoundError:
-    from SGLCell import SGLC_Cell
+from model.SGLCell import SGLC_Cell
+from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 
 import os
 
@@ -13,32 +11,53 @@ class SGLC_Encoder(nn.Module):
     """
     Spatio-Graph Learning Cell (SGLC) Encoder using multiple SGLCell layers
     """
-    def __init__(self, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, num_layers:int=3, use_propagator:bool=True, use_GRU:bool=False, device:str=None):
+    def __init__(
+            self,
+            num_cells:int,
+            input_dim:int,
+            num_nodes:int,
+            
+            graph_skip_conn:float=0.3,
+            use_GRU:bool=False,
+            
+            hidden_dim_GL:int=100,
+            attention_type:GraphLearnerAttention=None,
+            num_layers:int=3,
+            num_heads:int=16,
+            dropout:float=0,
+            epsilon:float=None,
+            
+            hidden_dim_GGNN:int=None,
+            num_steps:int=5,
+            use_GRU_in_GGNN:bool=True,
+            
+            device:str=None,
+            **kwargs
+        ):
         """
         Use a stack of SGLCell to learn from the data. Each SGLCell use the GL, the GGNN and the GRUCell module
         
         Args:
-            num_cells (int):            Number of the SGLCell layers in the stack
-            input_dim (int):            Feature dimension of input nodes
-            num_nodes (int):            Number of nodes in both input graph and hidden state
+            num_cells (int):                        Number of the SGLCell layers in the stack
+            input_dim (int):                        Feature dimension of input nodes
+            num_nodes (int):                        Number of nodes in both input graph and hidden state
             
-            hidden_dim_GL (int):        Hidden dimension for the Graph Learner module
-            hidden_dim_GGNN (int):      Hidden dimension of the hidden state for Gated Graph Neural Networks module (only if `use_GRU` is True)
+            graph_skip_conn (float):                Skip connection weight for adjacency matrix updates
+            use_GRU (bool):                         Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
-            graph_skip_conn (float):    Skip connection weight for adjacency matrix updates
+            hidden_dim_GL (int):                    Hidden dimension for the Graph Learner module
+            attention_type (GraphLearnerAttention): Type of attention used for the Graph Learner module
+            num_layers (int):                       Number of message passing layers in the GAT or Transformer module for the Graph Learner module
+            num_heads (int):                        Number of heads for multi-head attention in the Graph Learner module
+            dropout (float):                        Dropout probability applied in the attention layer of the Graph Learner module
+            epsilon (float):                        Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
             
-            dropout (float):            Dropout probability applied in the attention layer of the Graph Learner module
-            epsilon (float):            Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
-            num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
-            num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
-            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Graph Learner module
-            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Graph Learner module. If True the parameter `use_GATv2` is ignored
-            concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
-            num_layers (int):           Number of message passing layers in the GAT or Transformer module for the Graph Learner module
-            use_propagator (bool):      Use standard propagator module instead of GRU module in the Gated Graph Neural Networks module
-            use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
+            hidden_dim_GGNN (int):                  Hidden dimension of the hidden state for Gated Graph Neural Networks module (only if `use_GRU` is True)
+            num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
+            use_GRU_in_GGNN (bool):                 Use the GRU module instead of the standard propagator in the Gated Graph Neural Networks module
             
-            device (str):               Device to place the model on
+            device (str):                           Device to place the model on
+            **kwargs:                               Additional arguments of `SGLC_Cell`
         """
         super(SGLC_Encoder, self).__init__()
 
@@ -49,22 +68,22 @@ class SGLC_Encoder(nn.Module):
                     input_dim=input_dim,
                     num_nodes=num_nodes,
                     
-                    hidden_dim_GL=hidden_dim_GL,
-                    hidden_dim_GGNN=hidden_dim_GGNN,
                     graph_skip_conn=graph_skip_conn,
-                    
-                    dropout=dropout,
-                    epsilon=epsilon,
-                    num_heads=num_heads,
-                    num_steps=num_steps,
-                    use_GATv2=use_GATv2,
-                    use_Transformer=use_Transformer,
-                    concat=concat,
-                    num_layers=num_layers,
-                    use_propagator=use_propagator,
                     use_GRU=use_GRU,
                     
-                    device=device
+                    hidden_dim_GL=hidden_dim_GL,
+                    attention_type=attention_type,
+                    num_layers=num_layers,
+                    num_heads=num_heads,
+                    dropout=dropout,
+                    epsilon=epsilon,
+                    
+                    hidden_dim_GGNN=hidden_dim_GGNN,
+                    num_steps=num_steps,
+                    use_GRU_in_GGNN=use_GRU_in_GGNN,
+                    
+                    device=device,
+                    **kwargs
                 )
             )
         self.encoding_cells = nn.ModuleList(encoding_cells)
@@ -147,34 +166,57 @@ class SGLC_Classifier(nn.Module):
     """
     Classification model using SGLC Encoder with fully connected output layer
     """
-    def __init__(self, num_classes:int, num_cells:int, input_dim:int, num_nodes:int, hidden_dim_GL:int, hidden_dim_GGNN:int=None, graph_skip_conn:float=0.3, dropout:float=0, epsilon:float=None, num_heads:int=16, num_steps:int=5, use_GATv2:bool=False, use_Transformer:bool=False, concat:bool=False, num_layers:int=3, use_GRU:bool=False, use_propagator:bool=True, device:str=None):
+    def __init__(
+            self,
+            num_classes:int,
+            num_cells:int,
+            input_dim:int,
+            num_nodes:int, 
+            
+            graph_skip_conn:float=0.3,
+            use_GRU:bool=False,
+            
+            hidden_dim_GL:int=100,
+            attention_type:GraphLearnerAttention=None,
+            num_layers:int=3,
+            num_heads:int=16,
+            dropout:float=0,
+            epsilon:float=None,
+            
+                        
+            hidden_dim_GGNN:int=None,
+            num_steps:int=5,
+            use_GRU_in_GGNN:bool=True,
+            
+            device:str=None,
+            **kwargs
+        ):
         """
         Use a stack of SGLCell to learn from the data. Each SGLCell use the GL, the GGNN and the GRUCell module
         
         Args:
-            num_classes (int):          Number of output classes
+            num_classes (int):                      Number of output classes
         
-            num_cells (int):            Number of the SGLCell layers in the encoder stack
-            input_dim (int):            Feature dimension of input nodes
-            num_nodes (int):            Number of nodes in both input graph and hidden state
+            num_cells (int):                        Number of the SGLCell layers in the encoder stack
+            input_dim (int):                        Feature dimension of input nodes
+            num_nodes (int):                        Number of nodes in both input graph and hidden state
             
-            hidden_dim_GL (int):        Hidden dimension for Graph Learner module
-            hidden_dim_GGNN (int):      Hidden dimension of the hidden state for Gated Graph Neural Networks module (only if `use_GRU` is True)
+            graph_skip_conn (float):                Skip connection weight for adjacency updates
+            use_GRU (bool):                         Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             
-            graph_skip_conn (float):    Skip connection weight for adjacency updates
+            hidden_dim_GL (int):                    Hidden dimension for Graph Learner module
+            attention_type (GraphLearnerAttention): Type of attention used for the Graph Learner module
+            num_layers (int):                       Number of message passing layers in the GAT or Transformer module for the Graph Learner module
+            num_heads (int):                        Number of heads for multi-head attention in the Graph Learner module
+            dropout (float):                        Dropout probability applied in the attention layer of the Graph Learner module
+            epsilon (float):                        Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
             
-            dropout (float):            Dropout probability applied in the attention layer of the Graph Learner module
-            epsilon (float):            Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
-            num_heads (int):            Number of heads for multi-head attention in the Graph Learner module
-            num_steps (int):            Number of propagation steps in the Gated Graph Neural Networks module
-            use_GATv2 (bool):           Use GATV2 instead of GAT for the multi-head attention in the Graph Learner module
-            use_Transformer (bool):     Use `TransformerConv` for multi-head attention instead of GAT in the Graph Learner module. If True the parameter `use_GATv2` is ignored
-            concat (bool):              Used only if `use_Transformer` is True. If True the multi-head attentions are concatenated, otherwise are averaged
-            num_layers (int):           Number of message passing layers in the GAT or Transformer module for the Graph Learner module
-            use_propagator (bool):      Use standard propagator module instead of GRU module in the Gated Graph Neural Networks module
-            use_GRU (bool):             Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
+            hidden_dim_GGNN (int):                  Hidden dimension of the hidden state for Gated Graph Neural Networks module (only if `use_GRU` is True)
+            num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
+            use_GRU_in_GGNN (bool):                 Use the GRU module instead of the standard propagator in the Gated Graph Neural Networks module
             
-            device (str):               Device to place the model on
+            device (str):                           Device to place the model on
+            **kwargs:                               Additional arguments of `SGLC_Encoder`
         """
         super(SGLC_Classifier, self).__init__()
 
@@ -184,21 +226,20 @@ class SGLC_Classifier(nn.Module):
             'num_cells': num_cells,
             'input_dim': input_dim,
             'num_nodes': num_nodes,
-            'hidden_dim_GL': hidden_dim_GL,
-            'hidden_dim_GGNN': hidden_dim_GGNN,
             'graph_skip_conn': graph_skip_conn,
+            'use_GRU': use_GRU,
+            'hidden_dim_GL': hidden_dim_GL,
+            'attention_type': attention_type,
+            'num_layers': num_layers,
+            'num_heads': num_heads,
             'dropout': dropout,
             'epsilon': epsilon,
-            'num_heads': num_heads,
+            'hidden_dim_GGNN': hidden_dim_GGNN,
             'num_steps': num_steps,
-            'use_GATv2': use_GATv2,
-            'use_Transformer': use_Transformer,
-            'concat': concat,
-            'num_layers': num_layers,
-            'use_propagator': use_propagator,
-            'use_GRU': use_GRU,
+            'use_propagator': use_GRU_in_GGNN,
             'device': device
         }
+        self.config.update(kwargs)
         
         self.use_GRU= use_GRU
         self.device= device
@@ -207,22 +248,22 @@ class SGLC_Classifier(nn.Module):
             input_dim=input_dim,
             num_nodes=num_nodes,
             
-            hidden_dim_GL=hidden_dim_GL,
-            hidden_dim_GGNN=hidden_dim_GGNN,
             graph_skip_conn=graph_skip_conn,
-            
+            use_GRU=use_GRU,
+
+            hidden_dim_GL=hidden_dim_GL,
+            attention_type=attention_type,
+            num_layers=num_layers,
+            num_heads=num_heads,
             dropout=dropout,
             epsilon=epsilon,
-            num_heads=num_heads,
-            num_steps=num_steps,
-            use_GATv2=use_GATv2,
-            use_Transformer=use_Transformer,
-            concat=concat,
-            num_layers=num_layers,
-            use_propagator=use_propagator,
-            use_GRU=use_GRU,
             
-            device=device
+            hidden_dim_GGNN=hidden_dim_GGNN,
+            num_steps=num_steps,
+            use_GRU_in_GGNN=use_GRU_in_GGNN,
+            
+            device=device,
+            **kwargs
         )
 
         self.fc= nn.Sequential(
@@ -233,13 +274,7 @@ class SGLC_Classifier(nn.Module):
     
     def forward(self, input_seq:Tensor, supports:Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """
-        Use the SGLCEncoder to calculate the new representations of the feature/node matrix and the adjacency matrix using a hidden state initialize at all zeros.
-        1. Processes the inputs through SGLC encoder
-        2. Computes adjacency-weighted node aggregation:
-           - adj_mean: mean of [adj || adj^T] along rows --> (batch_size, num_nodes)
-           - weighted_features: last timestep features weighted by adj_mean
-           - features_mean: mean over nodes --> (batch_size, input_dim)
-        3. Applies FC layer and ReLU activation function over feature dimension
+        Use the SGLCEncoder to calculate the new representations of the feature/node matrix and the adjacency matrix using a hidden state initialize at all zeros
         
         Args:
             input_seq (Tensor):     Input features matrix with size shape (batch_size, sequential_length, num_nodes, input_dim)
@@ -312,61 +347,61 @@ class SGLC_Classifier(nn.Module):
         
         return model
 
-if __name__=="__main__":
-    def count_parameters(model:nn.Module):
-        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+# if __name__=="__main__":
+#     def count_parameters(model:nn.Module):
+#         return sum(p.numel() for p in model.parameters() if p.requires_grad)
     
-    num_classes     = 2
-    num_cells       = 2
-    input_dim       = 256//2
-    num_nodes       = 21
-    hidden_dim_GL   = 192
-    hidden_dim_GGNN = 192
-    dropout         = 0.5
-    num_heads       = 8
-    use_GATv2       = False
-    use_Transformer = True
-    concat          = True
-    num_layers      = 3
-    use_propagator  = True
-    use_GRU         = True
+#     num_classes     = 2
+#     num_cells       = 2
+#     input_dim       = 256//2
+#     num_nodes       = 21
+#     hidden_dim_GL   = 192
+#     hidden_dim_GGNN = 192
+#     dropout         = 0.5
+#     num_heads       = 8
+#     use_GATv2       = False
+#     use_Transformer = True
+#     concat          = True
+#     num_layers      = 3
+#     use_propagator  = True
+#     use_GRU         = True
     
-    model= SGLC_Classifier(
-        num_classes     = num_classes,
-        num_cells       = num_cells,
-        input_dim       = input_dim,
-        num_nodes       = num_nodes,
-        hidden_dim_GL   = hidden_dim_GL,
-        hidden_dim_GGNN = hidden_dim_GGNN,
-        dropout         = dropout,
-        num_heads       = num_heads,
-        use_GATv2       = use_GATv2,
-        use_Transformer = use_Transformer,
-        concat          = concat,
-        use_GRU         = use_GRU,
-        use_propagator  = use_propagator
-    )
+#     model= SGLC_Classifier(
+#         num_classes     = num_classes,
+#         num_cells       = num_cells,
+#         input_dim       = input_dim,
+#         num_nodes       = num_nodes,
+#         hidden_dim_GL   = hidden_dim_GL,
+#         hidden_dim_GGNN = hidden_dim_GGNN,
+#         dropout         = dropout,
+#         num_heads       = num_heads,
+#         use_GATv2       = use_GATv2,
+#         use_Transformer = use_Transformer,
+#         concat          = concat,
+#         use_GRU         = use_GRU,
+#         use_propagator  = use_propagator
+#     )
     
-    list_to_print= [(key,value) for key,value in model.config.items()]
-    string= ""
-    ljust_value= max([len(item) for item,_ in list_to_print])
-    for name,value in list_to_print:
-        string += "{} : {}\n".format(name.ljust(ljust_value), value)
+#     list_to_print= [(key,value) for key,value in model.config.items()]
+#     string= ""
+#     ljust_value= max([len(item) for item,_ in list_to_print])
+#     for name,value in list_to_print:
+#         string += "{} : {}\n".format(name.ljust(ljust_value), value)
     
-    print(f"Total size model : {count_parameters(model):,}")
-    print(f"\nUsing parametrs:\n{string}")
+#     print(f"Total size model : {count_parameters(model):,}")
+#     print(f"\nUsing parametrs:\n{string}")
     
-    print()
+#     print()
     
-    from torchinfo import summary
-    BATCH_SIZE= 64
-    SEQ_LEN= 4
-    summary(model, 
-        input_data={
-            'input_seq': torch.rand((BATCH_SIZE, SEQ_LEN, num_nodes, input_dim)),
-            'supports': torch.rand((BATCH_SIZE, num_nodes, num_nodes))
-        },
-        depth=1,  # Shows more detailed structure
-        col_names=['input_size', 'output_size', 'num_params', 'trainable'],
-        verbose=1
-    )
+#     from torchinfo import summary
+#     BATCH_SIZE= 64
+#     SEQ_LEN= 4
+#     summary(model, 
+#         input_data={
+#             'input_seq': torch.rand((BATCH_SIZE, SEQ_LEN, num_nodes, input_dim)),
+#             'supports': torch.rand((BATCH_SIZE, num_nodes, num_nodes))
+#         },
+#         depth=1,  # Shows more detailed structure
+#         col_names=['input_size', 'output_size', 'num_params', 'trainable'],
+#         verbose=1
+#     )
