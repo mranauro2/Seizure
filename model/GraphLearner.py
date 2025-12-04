@@ -261,6 +261,7 @@ class GraphLearner(nn.Module):
 
         attention = torch.mean(torch.stack(attention, 0), 0)
 
+        # Modify the attention matrix by setting values below epsilon to a marker
         if self.epsilon is not None:
             attention = self._build_epsilon_neighbourhood(attention)
 
