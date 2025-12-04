@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch import Tensor
 import warnings
 try:
-    from utils.constants_eeg import INF
+    from utils.constant.constants_eeg import INF
 except ModuleNotFoundError:
     INF = 1e20
 

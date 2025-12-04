@@ -206,7 +206,9 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 aa.ipynb
-test.ipynb
 aa.py
+test.ipynb
+test_2.ipynb
 metrics/
 others/
+not_used/

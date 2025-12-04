@@ -424,4 +424,3 @@ def subsets_from_patient_splits(dataset:Dataset, patient_to_indices:dict[str,lis
     subset = Subset(dataset, indeces)
 
     return subset
-

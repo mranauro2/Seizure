@@ -8,7 +8,7 @@ from threading import Lock
 import tempfile
 import shutil
 
-from utils import compute_slice_matrix
+from data.utils import compute_slice_matrix
 
 # for printing aesthetic
 import locale

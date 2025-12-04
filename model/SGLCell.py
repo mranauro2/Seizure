@@ -9,7 +9,7 @@ except ModuleNotFoundError:
     from GraphLearner import GraphLearner
     from GatedGraphNeuralNetworks import GGNNLayer
 
-class SGLCell(nn.Module):
+class SGLC_Cell(nn.Module):
     """
     Spatio-Graph Learning Cell (SGLC) with Graph Learner, the Gated Graph Neural Networks and the GRU module
     """
@@ -39,7 +39,7 @@ class SGLCell(nn.Module):
             
             device (str):               Device to place the model on
         """
-        super(SGLCell, self).__init__()
+        super(SGLC_Cell, self).__init__()
         self._num_nodes = num_nodes
         self._hidden_dim_GGNN= hidden_dim_GGNN
         self.use_GRU= use_GRU

@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 import os
 
-from utils import compute_slice_matrix
+from data.utils import compute_slice_matrix
 
 # for printing aesthetic
 import locale

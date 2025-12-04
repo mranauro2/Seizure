@@ -1,5 +1,5 @@
-from constants_main import METRICS_EXTENTION
-from metric import Metrics
+from constant.constants_main import METRICS_EXTENTION
+from classes.Metric_manager import Metrics
 
 import argparse
 import re
@@ -13,7 +13,7 @@ if __name__=="__main__":
     parser.add_argument('--marker',                  action='store_true',        help="Use a marker to highlight the points")
     parser.add_argument('--show',                    type=str, default='none',   help="If 'none' the train will not be show, if 'full' show full train, if 'points' show test metric for best K min/max validation values, if 'both' show both 'full' and 'points'")
     parser.add_argument('--best_k',                  type=int, default=3,        help="Show K train point")
-    parser.add_argument('--start_check',             type=int|float, default=0.2,help="If show is 'full' or 'both' start checking for the best value from a defined epoch. If it is int then it is the epoch num, if it is float then it is the percentage of the total")
+    parser.add_argument('--start_check',             type=float, default=0.2,    help="If show is 'full' or 'both' start checking for the best value from a defined epoch. If it is int then it is the epoch num, if it is float then it is the percentage of the total")
     parser.add_argument('--higher_is_better', '-hb', action='store_true',        help="If True, higher metric values are better (e.g., accuracy). If False, lower metric values are better (e.g., loss)")
     
     args= parser.parse_args()

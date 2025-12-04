@@ -6,17 +6,17 @@ import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Subset
 
-from utils.Checkpoint_manager import CheckPoint
-from utils.constants_eeg import *
-from utils.constants_main import *
-from utils.metrics_classes import *
-from utils.metric import Metrics
+from utils.classes.Checkpoint_manager import CheckPoint
+from utils.constant.constants_eeg import *
+from utils.constant.constants_main import *
+from utils.classes.Metrics_classes import *
+from utils.classes.Metric_manager import Metrics
 from data.scaler import *
 from data.utils import *
 
 from data.dataloader import SeizureDataset, SeizureSampler
 
-from model.ASGPFmodel import SGLCModel_classification
+from model.SGLCModel import SGLC_Classifier
 from model.loss_functions import *
 
 from torchvision.ops import sigmoid_focal_loss
@@ -139,7 +139,7 @@ def additional_info(*parameters_to_process:tuple[str,any]) -> str:
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 ALPHA_PRINT_INFO = False
-def train_or_eval(data_loader:DataLoader, model:SGLCModel_classification, optimizer:torch.optim.Optimizer, show_progress:bool=False, verbose:bool=False) -> list[tuple[str, float]]:
+def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, optimizer:torch.optim.Optimizer, show_progress:bool=False, verbose:bool=False) -> list[tuple[str, float]]:
     """
     Unique function to train and evaluate the model. The operation is only one, so the training is for only one epoch.\\
     The use of training mode or evaluation mode depend on the `optimizer` parameter. During the evaluation mode there are no
@@ -147,7 +147,7 @@ def train_or_eval(data_loader:DataLoader, model:SGLCModel_classification, optimi
 
     Args:
         data_loader (DataLoader):           Data on which compute operations for the model
-        model (SGLCModel_classification):   Model to train or to evaluate
+        model (SGLC_Classifier):            Model to train or to evaluate
         optimizer (torch.optim.Optimizer):  Optimizer used for training. If it is None then the evaluation is applyed
         show_progress (bool):               Show the progress bar. The progress bar is removed when terminated
         verbose (bool):                     Useful for printing information during the execution
@@ -243,15 +243,15 @@ def train_or_eval(data_loader:DataLoader, model:SGLCModel_classification, optimi
     
     return metrics
 
-def eval(data_loader:DataLoader, model:SGLCModel_classification, verbose:bool=True, show_progress:bool=False):
+def eval(data_loader:DataLoader, model:SGLC_Classifier, verbose:bool=True, show_progress:bool=False):
     """For more info see the function :func:`train_or_eval`"""
     return train_or_eval(data_loader=data_loader, model=model, optimizer=None, verbose=verbose, show_progress=show_progress)
 
-def train_epoch(data_loader:DataLoader, model:SGLCModel_classification, optimizer:torch.optim.Optimizer, verbose:bool=True, show_progress:bool=False):
+def train_epoch(data_loader:DataLoader, model:SGLC_Classifier, optimizer:torch.optim.Optimizer, verbose:bool=True, show_progress:bool=False):
     """For more info see the function :func:`train_or_eval`"""
     return train_or_eval(data_loader=data_loader, model=model, optimizer=optimizer, verbose=verbose, show_progress=show_progress)
 
-def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader, model:SGLCModel_classification, optimizer:torch.optim.Optimizer, num_epochs:int, verbose:bool=True, show_epoch_progress:bool=False):
+def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader, model:SGLC_Classifier, optimizer:torch.optim.Optimizer, num_epochs:int, verbose:bool=True, show_epoch_progress:bool=False):
     """
     Train the model and evaluate its performance. Use static parameters from :data:`utils.constants_main` and :data:`utils.constants_eeg`
     to implement some operations.\\
@@ -290,7 +290,7 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     checkpoint_observer.margin= PERCENTAGE_MARGIN
     
     LOGGER.info(
-        "CheckPoint will save {} values:".format('higher' if higher_is_better else 'lower') +
+        "CheckPoint will save {} values of '{}':".format('higher' if higher_is_better else 'lower', dummy_metrics[0][0]) +
         "\n" +
         "\tbest K model     : {} with margin of {:.2f}%".format(BEST_K_MODELS, 100*PERCENTAGE_MARGIN) +
         "\n" +
@@ -427,14 +427,14 @@ def main():
     if len(filename)==0 and (not do_train):
         raise ValueError(f"Evaluation stopped, model not present in the '{MODEL_SAVE_FOLDER}' folder")
     if len(filename)!=0:
-        model= SGLCModel_classification.load(filename, device=DEVICE)
+        model= SGLC_Classifier.load(filename, device=DEVICE)
         LOGGER.info(f"Loaded '{os.path.basename(filename)}'...")
     else:        
         feature_matrix, _, _ = dataset[0]
         num_nodes= feature_matrix.size(1)
         input_dim= feature_matrix.size(2)
                 
-        model= SGLCModel_classification(
+        model= SGLC_Classifier(
             num_classes= NUM_CLASSES,
             
             num_cells= NUM_CELLS,

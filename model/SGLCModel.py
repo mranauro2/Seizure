@@ -3,13 +3,13 @@ import torch.nn as nn
 from torch import Tensor
 
 try:
-    from model.SGLCell import SGLCell
+    from model.SGLCell import SGLC_Cell
 except ModuleNotFoundError:
-    from SGLCell import SGLCell
+    from SGLCell import SGLC_Cell
 
 import os
 
-class SGLCEncoder(nn.Module):
+class SGLC_Encoder(nn.Module):
     """
     Spatio-Graph Learning Cell (SGLC) Encoder using multiple SGLCell layers
     """
@@ -40,12 +40,12 @@ class SGLCEncoder(nn.Module):
             
             device (str):               Device to place the model on
         """
-        super(SGLCEncoder, self).__init__()
+        super(SGLC_Encoder, self).__init__()
 
         encoding_cells = list()
         for _ in range(num_cells):
             encoding_cells.append(
-                SGLCell(
+                SGLC_Cell(
                     input_dim=input_dim,
                     num_nodes=num_nodes,
                     
@@ -97,7 +97,7 @@ class SGLCEncoder(nn.Module):
         current_hidden = initial_hidden_state
 
         # Process each timestep
-        cell:SGLCell= None
+        cell:SGLC_Cell= None
         for t in range(seq_length):
             input_t = inputs[t]
             updated_states = []
@@ -137,13 +137,13 @@ class SGLCEncoder(nn.Module):
             :return Tensor:            Hidden state tensor, calculated as stack of the hidden state for each SGLCell
         """
         init_states = []
-        sglc_cell:SGLCell= None
+        sglc_cell:SGLC_Cell= None
         for sglc_cell in self.encoding_cells:
             init_states.append(sglc_cell.hidden_state_empty(batch_size))
             
         return torch.stack(init_states, dim=0)
 
-class SGLCModel_classification(nn.Module):
+class SGLC_Classifier(nn.Module):
     """
     Classification model using SGLC Encoder with fully connected output layer
     """
@@ -176,7 +176,7 @@ class SGLCModel_classification(nn.Module):
             
             device (str):               Device to place the model on
         """
-        super(SGLCModel_classification, self).__init__()
+        super(SGLC_Classifier, self).__init__()
 
         # Store configuration for saving
         self.config = {
@@ -202,7 +202,7 @@ class SGLCModel_classification(nn.Module):
         
         self.use_GRU= use_GRU
         self.device= device
-        self.encoder = SGLCEncoder(
+        self.encoder = SGLC_Encoder(
             num_cells=num_cells,
             input_dim=input_dim,
             num_nodes=num_nodes,
@@ -307,7 +307,7 @@ class SGLCModel_classification(nn.Module):
         if device:
             config['device'] = device
         
-        model = SGLCModel_classification(**config)
+        model = SGLC_Classifier(**config)
         model.load_state_dict(checkpoint['model_state_dict'])
         
         return model
@@ -331,7 +331,7 @@ if __name__=="__main__":
     use_propagator  = True
     use_GRU         = True
     
-    model= SGLCModel_classification(
+    model= SGLC_Classifier(
         num_classes     = num_classes,
         num_cells       = num_cells,
         input_dim       = input_dim,
