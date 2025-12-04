@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+import warnings
+
 from model.GatedGraphNeuralNetworks import GGNNLayer
 from model.GraphLearner.GraphLearner import GraphLearner
 from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
@@ -57,13 +59,15 @@ class SGLC_Cell(nn.Module):
             **kwargs:                               Additional arguments of `GraphLearner`
         """
         super(SGLC_Cell, self).__init__()
-        self._num_nodes = num_nodes
+        self._num_nodes= num_nodes
         self._hidden_dim_GGNN= hidden_dim_GGNN
         self.use_GRU= use_GRU
-        self.graph_skip_conn = graph_skip_conn
+        self.graph_skip_conn= graph_skip_conn
         
         if use_GRU and (hidden_dim_GGNN is None):
             raise ValueError("hidden_dim_GGNN must not None")
+        if not(use_GRU) and (hidden_dim_GGNN is not None):
+            warnings.warn("hidden_dim_GGNN is not used because use_GRU is False")
 
         keys_graph_learner = ["act", "v2", "concat", "beta"]
         kwargs_graph_learner = {key:value for key,value in kwargs.items() if key in keys_graph_learner}

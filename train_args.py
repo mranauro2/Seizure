@@ -1,13 +1,17 @@
 import argparse
+from model.loss.LossType import LossType
 from data.scaler.ScalerType import ScalerType
 from data.dataloader.SeizureDatasetMethod import SeizureDatasetMethod
 
-def parse_arguments() -> tuple[str, list[str], SeizureDatasetMethod, float|None, ScalerType|None, bool, int, bool, int, bool, str|None]:
+
+def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, float|None, ScalerType|None, bool, int, bool, int, bool, str|None]:
     """
     Parses command-line arguments
     
     Returns:
         tuple:
+            - loss_type (LossType):\\
+                Type of loss to use during train/evaluation
             - input_dir (str):\\
                 Path to the directory containing resampled files
             - files_record (list[str]):\\
@@ -34,6 +38,7 @@ def parse_arguments() -> tuple[str, list[str], SeizureDatasetMethod, float|None,
     
     list_scaler_type= [scaler.name.lower() for scaler in ScalerType]
     list_seizuredataset_methods= [method.name.lower() for method in SeizureDatasetMethod]
+    list_loss_type= [loss.name.lower() for loss in LossType]
     
     parser = argparse.ArgumentParser(
         description="Train or evaluate the `model.ASGPFmodel.SGLCModel_classification` on specified files. Other parameters are hardcoded inside constants files. The files are `utils.constants_eeg.py` and `utils.constants_main.py`",
@@ -45,6 +50,7 @@ def parse_arguments() -> tuple[str, list[str], SeizureDatasetMethod, float|None,
     parser.add_argument('files_record', type=str, nargs='+', help="A list of one or more simple file names with line records as described in `data.dataloade.SeizureDataset` to process")
 
     # --- Optional Arguments ---
+    parser.add_argument('--loss', '-l',     type=str,   default=list_loss_type[0],              help="Loss to use during training/evaluation")
     parser.add_argument('--preprocess_dir', action='store_true',                                help="If the `input_dir` is the directory to the preprocess data and not to the resampled files")
     parser.add_argument('--method',   '-m', type=str,   default=list_seizuredataset_methods[0], help="How to compute the adjacency matrix: {}".format(", ".join(list_seizuredataset_methods)))
     parser.add_argument('--lambda_value',   type=float, default=None,                           help="Maximum eigenvalue for scaling the Laplacian matrix. If negative, computed automatically, if None compute only the Laplacian matrix")
@@ -59,6 +65,10 @@ def parse_arguments() -> tuple[str, list[str], SeizureDatasetMethod, float|None,
     
     if (args.train) and (args.epochs is None):
         parser.error("The argument --epochs is required when --train is set")
+
+    possibilities= list_loss_type
+    if (args.loss) not in possibilities:
+        parser.error("The value '{}' in argument --loss do not exists. Choose between: '{}'".format(args.loss, "', '".join(possibilities)))
 
     possibilities= list_seizuredataset_methods
     if (args.method) not in possibilities:
@@ -75,9 +85,10 @@ def parse_arguments() -> tuple[str, list[str], SeizureDatasetMethod, float|None,
         args.input_dir= None
     
     method = SeizureDatasetMethod[args.method.upper()]
+    loss   = LossType[args.loss]
     scaler = None if (args.scaler is None) else ScalerType[args.scaler.upper()]
     
-    return args.input_dir, args.files_record, method, args.lambda_value, scaler, args.single_scaler, args.save_num, args.train, args.epochs, args.verbose, preprocess_dir
+    return loss, args.input_dir, args.files_record, method, args.lambda_value, scaler, args.single_scaler, args.save_num, args.train, args.epochs, args.verbose, preprocess_dir
 
 if __name__=="__main__":
     args= parse_arguments()

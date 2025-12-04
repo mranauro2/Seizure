@@ -49,17 +49,24 @@ RANDOM_STATE= 13
 """Controls the shuffling applied to the data before applying the split. Pass an int for reproducible output across multiple function calls"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# OTHERS INFO
+# LOSSES INFO
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 LEARNING_RATE= 1e-6
 """Learning rate of the model"""
 
+USE_WEIGHT= False
+"""If True, will be use weighted loss if available"""
+
 FOCAL_LOSS_APLHA= 0.99
-"""Weighting factor in range [0, 1] to balance positive vs negative examples. High weight for positive class. If None are set the default"""
+"""Weighting factor in range [0, 1] to balance positive vs negative examples. High weight for positive class. If None are set based on the representativeness of the classes"""
 
 FOCAL_LOSS_GAMMA= 2.0
-"""Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples. Higher is more focus on hard examples. If None are set the default"""
+"""Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples. Higher is more focus on hard examples"""
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# CHECKPOINT INFO
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 BEST_K_MODELS= 0
 """Maximum number of model maintained as best model in performance"""

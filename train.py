@@ -3,7 +3,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import torch
-from torch.nn import functional as F
+from torch.nn import Module
 from torch.utils.data import DataLoader, Subset
 
 from utils.classes.Checkpoint_manager import CheckPoint
@@ -16,8 +16,10 @@ from data.utils import *
 
 from data.dataloader.dataloader import SeizureDataset, SeizureSampler
 
+from model.loss.loss_regularization import *
 from model.SGLCModel import SGLC_Classifier
-from model.loss_functions import *
+from model.loss.LossType import LossType
+from model.loss.loss_classes import *
 
 from torchvision.ops import sigmoid_focal_loss
 from torch.nn.functional import one_hot
@@ -107,39 +109,80 @@ def func_operation(x:Tensor) -> Tensor:
     """Operation to apply at the scaler"""
     return x.transpose(dim0=0, dim1=2).reshape(x.size(2), -1)
 
-def additional_info(*parameters_to_process:tuple[str,any]) -> str:
-    """Extract static additionl info"""    
-    list_to_print= [
-        ("NUM_CELLS", NUM_CELLS),
-        ("LEARNING_RATE", LEARNING_RATE), 
-        ("DAMP_SMOOTH", DAMP_SMOOTH),
-        ("DAMP_DEGREE", DAMP_DEGREE),
-        ("DAMP_SPARSITY", DAMP_SPARSITY),
-        
-        ("GRAPH_SKIP_CONN", GRAPH_SKIP_CONN),
-        ("DROPOUT", DROPOUT),
-        ("USE_GATv2", USE_GATv2),
-        ("USE_TRANSFORMER", USE_TRANSFORMER),
-        ("CONCAT", CONCAT),
-        ("USE_STANDARD_PROPAGATOR", USE_STANDARD_PROPAGATOR),
-        ('NUM_LAYERS', NUM_LAYERS),
-        ("USE_GRU", USE_GRU)
-    ]
-    list_to_print.extend(parameters_to_process)
-    
+def dict_to_str(list_to_print:list[tuple[str,any]], print_none:bool=False, print_zero:bool=False):
+    """Generate a string given the input"""
     string= ""
     ljust_value= max([len(item) for item,_ in list_to_print])
     for name,value in list_to_print:
-        string += "{} : {}\n".format(name.ljust(ljust_value), value)
-        
+        if not(print_none) and (value is None):
+            continue
+        if not(print_zero) and (isinstance(value, int) or isinstance(value, float)) and (value==0.0):
+            continue
+        string += "\t{} : {}\n".format(name.ljust(ljust_value), value)
     return string
+
+def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -> str:
+    """Extract static additionl info"""
+    # DATASET
+    dataset_tuple_no_preprocess = [
+        ("MAX_SEQ_LEN", MAX_SEQ_LEN),
+        ("TIME_STEP_SIZE", TIME_STEP_SIZE),
+        ("USE_FFT", USE_FFT)
+    ]
+    dataset_tuple = [
+        ("TOP_K", TOP_K),
+        ("METHOD_COMPUTE_ADJ", METHOD_COMPUTE_ADJ)
+        *dataset_data
+    ]
+    if preprocessed_data:
+        dataset_tuple.extend(dataset_tuple_no_preprocess)
+    dataset_str = "Dataset info:\n{}".format(dict_to_str(dataset_tuple))
+    
+    # MODEL
+    model_tuple = [
+        ("NUM_CELLS", NUM_CELLS),
+        ("GRAPH_SKIP_CONN", GRAPH_SKIP_CONN),
+        ("USE_GRU", USE_GRU)
+    ]
+    model_str = "Model info:\n{}".format(dict_to_str(model_tuple))
+    
+    # GRAPH LEARNER
+    GL_tuple = [
+        ("HIDDEN_DIM_GL", HIDDEN_DIM_GL),
+        ("NUM_HEADS", NUM_HEADS),
+        ("ATTENTION_TYPE", ATTENTION_TYPE),
+        ("NUM_LAYERS", NUM_LAYERS),
+        ("DROPOUT", DROPOUT),
+        ("EPSILON", EPSILON)
+    ]
+    GL_str = "GL info:\n{}".format(dict_to_str(GL_tuple))
+    
+    # GATED GRAPH NEURAL NETWORK
+    GGNN_tuple = [("HIDDEN_DIM_GGNN", HIDDEN_DIM_GGNN)] if USE_GRU else []
+    GGNN_tuple.extend([
+        ("NUM_STEPS", NUM_STEPS),
+        ("USE_GRU_IN_GGNN", USE_GRU_IN_GGNN)
+    ])
+    GGNN_str = "GGNN info:\n{}".format(dict_to_str(GGNN_tuple))
+    
+    # LOSSES
+    loss_tuple = [
+        ("LEARNING_RATE", LEARNING_RATE),
+        ("DAMP_SMOOTH", DAMP_SMOOTH),
+        ("DAMP_DEGREE", DAMP_DEGREE),
+        ("DAMP_SPARSITY", DAMP_DEGREE)
+    ]
+    loss_str = "Losses info:\n{}".format(dict_to_str(loss_tuple))
+    
+    total_str = "\n".join([dataset_str, model_str, GL_str, GGNN_str, loss_str])
+        
+    return total_str
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # TRAINING & EVALUATION
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-ALPHA_PRINT_INFO = False
-def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, optimizer:torch.optim.Optimizer, show_progress:bool=False, verbose:bool=False) -> list[tuple[str, float]]:
+def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss:Loss, optimizer:torch.optim.Optimizer, show_progress:bool=False, verbose:bool=False) -> list[tuple[str, float]]:
     """
     Unique function to train and evaluate the model. The operation is only one, so the training is for only one epoch.\\
     The use of training mode or evaluation mode depend on the `optimizer` parameter. During the evaluation mode there are no
@@ -148,6 +191,7 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, optimizer:torch
     Args:
         data_loader (DataLoader):           Data on which compute operations for the model
         model (SGLC_Classifier):            Model to train or to evaluate
+        prediction_loss (Loss):             Prediction loss class to train/evaluate the model
         optimizer (torch.optim.Optimizer):  Optimizer used for training. If it is None then the evaluation is applyed
         show_progress (bool):               Show the progress bar. The progress bar is removed when terminated
         verbose (bool):                     Useful for printing information during the execution
@@ -157,15 +201,6 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, optimizer:torch
     """
     is_training = optimizer is not None
     model.train(is_training)
-    
-    # pos_weight= torch.Tensor([NUM_NOT_SEIZURE_DATA / NUM_SEIZURE_DATA]).to(device=DEVICE)
-    
-    alpha = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else NUM_NOT_SEIZURE_DATA / (NUM_SEIZURE_DATA+NUM_NOT_SEIZURE_DATA)
-    gamma = FOCAL_LOSS_GAMMA if (FOCAL_LOSS_GAMMA is not None) else 1.0
-    global ALPHA_PRINT_INFO
-    if not(ALPHA_PRINT_INFO):
-        LOGGER.info("Using alpha {:.3f} and gamma {:.3f}".format(alpha, gamma))
-        ALPHA_PRINT_INFO = True
     
     # init metrics
     average_total= Average_Meter("total")
@@ -193,8 +228,7 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, optimizer:torch
             target_one_hot= one_hot(target.squeeze(-1).to(dtype=torch.int64), num_classes=NUM_CLASSES)
             target_one_hot= target_one_hot.to(dtype=target.dtype)
 
-            #loss_pred= F.binary_cross_entropy_with_logits(result, target_one_hot, pos_weight=pos_weight, reduction="none").sum(dim=1)
-            loss_pred = sigmoid_focal_loss(inputs=result, targets=target_one_hot, alpha=alpha, gamma=gamma, reduction='none').sum(dim=1)
+            loss_pred = prediction_loss.compute_loss(result, target)
             
             loss_smooth= smoothness_loss_func(node_matrix_for_smooth, adj_matrix)
             loss_degree= degree_regularization_loss_func(adj_matrix)
@@ -339,9 +373,16 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def main():
-    # take input from command line
-    input_dir, files_record, method, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    string_additional_info= additional_info(('scaler', scaler), ('method', method))
+    # take input from command line and print some informations
+    loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
+    string_additional_info= additional_info(
+        preprocessed_data=(preprocess_dir is not None),
+        dataset_data=[
+            ('method', method),
+            ('lambda_value', lambda_value),
+            ('scaler', type(scaler))
+        ]
+    )
     string= "{}{}".format("\n\t", "\n\t".join([item for item in string_additional_info.split("\n")]))
     LOGGER.info(string)
     
@@ -356,12 +397,13 @@ def main():
         
         time_step_size= TIME_STEP_SIZE,
         max_seq_len= MAX_SEQ_LEN,
+        use_fft= USE_FFT,
         
         preprocess_data=preprocess_dir,
         
         method=method,
-        use_fft= USE_FFT,
-        top_k= TOP_K
+        top_k= TOP_K,
+        lambda_value=lambda_value
     )
     
     # splitting data
@@ -374,15 +416,10 @@ def main():
     
     # generating new scaler
     if (scaler is not None):
-        LOGGER.info(f"Loading scaler '{scaler}'...")
-        scaler_name= "{}{}_{}.{}".format(scaler, '_single' if single_scaler else "",scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
+        LOGGER.info(f"Loading scaler '{scaler.name}'...")
+        scaler_name= "{}{}_{}.{}".format(scaler.name, '_single' if single_scaler else "", scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
         scaler_path= os.path.join(SCALER_SAVE_FOLDER, scaler_name)
-        if  (scaler=='z-score'):
-            scaler= StandardScaler()
-        elif (scaler=='min-max'):
-            scaler= MinMaxScaler()
-        else:
-            raise ValueError(f"scaler '{scaler}' is not defined")
+        scaler= ConcreteScaler().create_scaler(scaler, device=DEVICE)
     
     if (scaler is not None):
         if os.path.exists(scaler_path):
@@ -417,7 +454,7 @@ def main():
         LOGGER.info("\tTotal negative samples  : {:>{}}/{:,}".format(samples_neg, len(str(samples_pos+samples_neg)), samples_pos+samples_neg))
         LOGGER.info("\tPositive ratio          : {:.3f}%".format(100 * samples_pos / (samples_pos+samples_neg)))
     
-    # load model if exists
+    # load model if exists or create a new model
     LOGGER.info("Loading model...")
     DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
     LOGGER.info(f"Using {DEVICE} device...")
@@ -435,29 +472,32 @@ def main():
         input_dim= feature_matrix.size(2)
                 
         model= SGLC_Classifier(
-            num_classes= NUM_CLASSES,
+            num_classes     = NUM_CLASSES,
             
-            num_cells= NUM_CELLS,
-            input_dim= input_dim,
-            num_nodes= num_nodes,
+            num_cells       = NUM_CELLS,
+            input_dim       = input_dim,
+            num_nodes       = num_nodes,
             
-            hidden_dim_GL= HIDDEN_DIM_GL,
-            hidden_dim_GGNN=HIDDEN_DIM_GGNN,
+            graph_skip_conn = GRAPH_SKIP_CONN,
+            use_GRU         = USE_GRU,
             
-            graph_skip_conn= GRAPH_SKIP_CONN,
+            hidden_dim_GL   = HIDDEN_DIM_GL,
+            attention_type  = ATTENTION_TYPE,
+            num_layers      = NUM_LAYERS,
+            num_heads       = NUM_HEADS,
+            dropout         = DROPOUT,
+            epsilon         = EPSILON,
             
-            dropout= DROPOUT,
-            epsilon= EPSILON,
-            num_heads= NUM_HEADS,
-            num_steps= NUM_STEPS,
-            use_GATv2= USE_GATv2,
-            use_Transformer=USE_TRANSFORMER,
-            concat=CONCAT,
-            use_propagator=USE_STANDARD_PROPAGATOR,
-            num_layers=NUM_LAYERS,
-            use_GRU= USE_GRU,
+            hidden_dim_GGNN = HIDDEN_DIM_GGNN,
+            num_steps       = NUM_STEPS,
+            use_GRU_in_GGNN = USE_GRU_IN_GGNN,
             
-            device= DEVICE
+            act             = ACT,
+            v2              = USE_GATv2,
+            concat          = CONCAT,
+            beta            = BETA,
+            
+            device          = DEVICE
         )    
     
     # set the number of seizure and not seizure data
@@ -466,6 +506,22 @@ def main():
         raise ValueError(f"Training aborted, no data without seizure")
     if do_train and (NUM_SEIZURE_DATA==0):
         raise ValueError(f"Training aborted, no data with seizure")
+    
+    # create loss to use
+    weight_seizure      = NUM_NOT_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
+    weight_not_seizure  = NUM_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
+    pos_weight          = torch.Tensor([weight_seizure, weight_not_seizure]).to(device=DEVICE) if USE_WEIGHT else None
+    alpha               = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else weight_seizure
+    match loss_type:
+        case LossType.CROSS_ENTROPY:
+            loss = CrossEntropy(weight=pos_weight)
+        case LossType.BCE_LOGITS:
+            loss = BCE_Logits(num_classes=NUM_CLASSES, pos_weight=pos_weight)
+        case LossType.FOCAL_LOSS:
+            loss = FocalLoss(num_classes=NUM_CLASSES, alpha=alpha, gamma=FOCAL_LOSS_GAMMA)
+        case _:
+            raise NotImplementedError("Loss {} is not implemented yet".format(loss_type))
+    LOGGER.info("Using loss type {} with parameters:\n{}".format(loss_type.name, dict_to_str(loss.parameters())))
     
     # start train or evaluation
     if do_train:
