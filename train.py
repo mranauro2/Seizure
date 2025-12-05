@@ -243,10 +243,6 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
             node_matrix_for_smooth= node_matrix.transpose(dim0=1, dim1=2)
             node_matrix_for_smooth= node_matrix_for_smooth.reshape(node_matrix_for_smooth.size(0), node_matrix_for_smooth.size(1), -1)
             
-            # reshape from (batch_size, 1) to (batch_size) and transform in one-hot encoder for the focal loss (the original dtype is keep)
-            target_one_hot= one_hot(target.squeeze(-1).to(dtype=torch.int64), num_classes=NUM_CLASSES)
-            target_one_hot= target_one_hot.to(dtype=target.dtype)
-
             loss_pred = prediction_loss.compute_loss(result, target)
             
             loss_smooth= smoothness_loss_func(node_matrix_for_smooth, adj_matrix)

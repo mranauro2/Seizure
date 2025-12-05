@@ -264,26 +264,6 @@ def main(summary_dir:str, data_dir:str, file_name:str, save_dir:str, seq_len:int
     finally:
         # Clean up temporary directory
         shutil.rmtree(temp_dir, ignore_errors=True)
-        
-    # # Process segments in parallel
-    # with open(file_name, "a") as f:
-    #     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-    #         # Submit all tasks
-    #         futures = {executor.submit(process_segment, task): task for task in tasks}
-            
-    #         # Process results as they complete
-    #         for future in tqdm(as_completed(futures), total=len(tasks), desc="Processing segments"):
-    #             output_string, overlap, skipped = future.result()
-                
-    #             # Thread-safe file writing
-    #             with file_lock:
-    #                 f.write(output_string)
-                
-    #             total_segments += 1
-    #             if overlap:
-    #                 seizure_segments += 1
-    #             if skipped:
-    #                 skipped_segments += 1
     
     if verbose: 
         z_fill_print = len(str("{0:n}".format(total_segments)))
