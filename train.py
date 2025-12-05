@@ -224,7 +224,7 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
     average_sparsity = Loss_Meter("sparsity") if (DAMP_SPARSITY!=0) else None
     average_pred     = Loss_Meter("pred")     if (average_smooth or average_degree or average_sparsity) else None
     average_total    = Loss_Meter("total" if average_pred else "")
-    accuracy         = Accuracy_Meter([NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA], num_classes=NUM_CLASSES)
+    accuracy         = Accuracy_Meter([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA], num_classes=NUM_CLASSES)
     conf_matrix      = ConfusionMatrix_Meter(NUM_CLASSES)
     
     # enable or not the gradients

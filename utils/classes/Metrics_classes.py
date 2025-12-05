@@ -27,18 +27,18 @@ class Loss_Meter:
 
 class Accuracy_Meter:
     """Keep track of weighted accuracy values and target class probabilities over time."""
-    def __init__(self, class_samples:list[int]=None, num_classes:int=2):
+    def __init__(self, class_weight:list[int]=None, num_classes:int=2):
         """
         Initialize the meter with class weights.
-            :param class_samples (list[int]):   A list of number of samples per class
+            :param class_samples (list[int]):   A list of weight per class
             :param num_classes (int):           Number of classes
         """
         self.num_classes = num_classes
-        if class_samples is not None:
-            total= sum(class_samples)
-            self.class_samples = torch.tensor(class_samples, dtype=torch.float) / total
+        if class_weight is not None:
+            total= sum(class_weight)
+            self.class_weight = torch.tensor(class_weight, dtype=torch.float) / total
         else:
-            self.class_samples = None
+            self.class_weight = None
         
         self.weighted_correct = 0.0
         self.total_weight = 0.0
@@ -62,7 +62,7 @@ class Accuracy_Meter:
 
         # Assign each sample a weight based on its true class
         target = target.to(dtype=torch.int64)
-        sample_weights = self.class_samples[target] if (self.class_samples is not None) else torch.ones_like(target, dtype=torch.float)
+        sample_weights = self.class_weight[target] if (self.class_weight is not None) else torch.ones_like(target, dtype=torch.float)
 
         weighted_correct = (correct_mask * sample_weights).sum().item()
         total_weight = sample_weights.sum().item()

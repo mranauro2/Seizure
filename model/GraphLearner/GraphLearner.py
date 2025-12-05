@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from utils.constant.constants_eeg import INF
-from model.EEGGraphAttentionLayer import EEGGraphAttentionLayer
+from model.GraphLearner.EEGGraphAttentionLayer import EEGGraphAttentionLayer
 from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 
 from torch_geometric.nn import GAT
