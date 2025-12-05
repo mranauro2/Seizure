@@ -1,6 +1,5 @@
 """Contains constant useful to the computation of EEG files"""
 from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
-from data.dataloader.SeizureDatasetMethod import SeizureDatasetMethod
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # UTILS INFO
@@ -37,10 +36,6 @@ Use the Fast Fourier Transform when obtain the slice from the file"""
 TOP_K= None
 """Used in :data:`data.dataloader.SeizureDataset` \\
 Maintain only the `top_k` higher value when compute the adjacency matrix"""
-
-METHOD_COMPUTE_ADJ= SeizureDatasetMethod.CROSS
-"""Used in :data:`data.dataloader.SeizureDataset` \\
-How to compute the adjacency matrix"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # DAMPING FACTOR FOR LOSS FUNCTIONS

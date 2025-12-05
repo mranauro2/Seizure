@@ -11,7 +11,7 @@ METRICS_SAVE_FOLDER= "./metrics"
 MODEL_SAVE_FOLDER= "./weights"
 """Folder where save the model weights"""
 
-SCALER_SAVE_FOLDER= "./scalars_weight"
+SCALER_SAVE_FOLDER= "./scalers_weight"
 """Folder where save the values calculates with the scalar"""
 
 MODEL_NAME= "Model"

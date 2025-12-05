@@ -50,7 +50,7 @@ def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, f
     parser.add_argument('files_record', type=str, nargs='+', help="A list of one or more simple file names with line records as described in `data.dataloade.SeizureDataset` to process")
 
     # --- Optional Arguments ---
-    parser.add_argument('--loss', '-l',     type=str,   default=list_loss_type[0],              help="Loss to use during training/evaluation")
+    parser.add_argument('--loss', '-l',     type=str,   default=list_loss_type[0],              help="Loss to use during training/evaluation: {}".format(", ".join(list_loss_type)))
     parser.add_argument('--preprocess_dir', action='store_true',                                help="If the `input_dir` is the directory to the preprocess data and not to the resampled files")
     parser.add_argument('--method',   '-m', type=str,   default=list_seizuredataset_methods[0], help="How to compute the adjacency matrix: {}".format(", ".join(list_seizuredataset_methods)))
     parser.add_argument('--lambda_value',   type=float, default=None,                           help="Maximum eigenvalue for scaling the Laplacian matrix. If negative, computed automatically, if None compute only the Laplacian matrix")
@@ -85,7 +85,7 @@ def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, f
         args.input_dir= None
     
     method = SeizureDatasetMethod[args.method.upper()]
-    loss   = LossType[args.loss]
+    loss   = LossType[args.loss.upper()]
     scaler = None if (args.scaler is None) else ScalerType[args.scaler.upper()]
     
     return loss, args.input_dir, args.files_record, method, args.lambda_value, scaler, args.single_scaler, args.save_num, args.train, args.epochs, args.verbose, preprocess_dir

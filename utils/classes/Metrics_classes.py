@@ -34,11 +34,7 @@ class Accuracy_Meter:
             :param num_classes (int):           Number of classes
         """
         self.num_classes = num_classes
-        if class_weight is not None:
-            total= sum(class_weight)
-            self.class_weight = torch.tensor(class_weight, dtype=torch.float) / total
-        else:
-            self.class_weight = None
+        self.class_weight = torch.tensor(class_weight, dtype=torch.float) if (class_weight is not None) else None
         
         self.weighted_correct = 0.0
         self.total_weight = 0.0

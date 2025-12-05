@@ -36,7 +36,7 @@ import re
 # GLOBAL VARIABLE
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-MIN_SAMPLER_PER_BATCH= max(1, round( PERCENTAGE_BOTH_CLASS_IN_BATCH/100 * BATCH_SIZE )) if (PERCENTAGE_BOTH_CLASS_IN_BATCH is None) else None
+MIN_SAMPLER_PER_BATCH= max(1, round( PERCENTAGE_BOTH_CLASS_IN_BATCH/100 * BATCH_SIZE )) if (PERCENTAGE_BOTH_CLASS_IN_BATCH is not None) else 0
 """If not None, min number of both class in a batch"""
 
 START_EPOCH= 0
@@ -147,10 +147,9 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     ]
     dataset_tuple = [
         ("TOP_K", TOP_K),
-        ("METHOD_COMPUTE_ADJ", METHOD_COMPUTE_ADJ)
         *dataset_data
     ]
-    if preprocessed_data:
+    if not(preprocessed_data):
         dataset_tuple.extend(dataset_tuple_no_preprocess)
     dataset_str = "Dataset info:\n{}".format(dict_to_str(dataset_tuple))
     
@@ -167,9 +166,13 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
         ("HIDDEN_DIM_GL", HIDDEN_DIM_GL),
         ("NUM_HEADS", NUM_HEADS),
         ("ATTENTION_TYPE", ATTENTION_TYPE),
+        ("ACT", ACT),
         ("NUM_LAYERS", NUM_LAYERS),
         ("DROPOUT", DROPOUT),
-        ("EPSILON", EPSILON)
+        ("EPSILON", EPSILON),
+        ("USE_GATv2", USE_GATv2),
+        ("CONCAT", CONCAT),
+        ("BETA", BETA)
     ]
     GL_str = "GL info:\n{}".format(dict_to_str(GL_tuple))
     
@@ -267,7 +270,7 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
                 (average_pred,     loss_pred),
                 (average_smooth,   DAMP_SMOOTH*loss_smooth),
                 (average_degree,   DAMP_DEGREE*loss_degree),
-                (average_sparsity, DAMP_SPARSITY,loss_sparsity)
+                (average_sparsity, DAMP_SPARSITY*loss_sparsity)
             ]
             for average,loss in loss_tuple:
                 if (average is not None):
@@ -286,7 +289,7 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
     ]
     for average,_ in loss_tuple:
         if (average is not None):
-            metrics.extend(average.get_metric())
+            metrics.extend([average.get_metric()])
     
     # print metrics during execution
     if verbose:
@@ -298,15 +301,15 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
     
     return metrics
 
-def eval(data_loader:DataLoader, model:SGLC_Classifier, verbose:bool=True, show_progress:bool=False):
+def eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss:Loss, verbose:bool=True, show_progress:bool=False):
     """For more info see the function :func:`train_or_eval`"""
-    return train_or_eval(data_loader=data_loader, model=model, optimizer=None, verbose=verbose, show_progress=show_progress)
+    return train_or_eval(data_loader=data_loader, model=model, prediction_loss=prediction_loss, optimizer=None, verbose=verbose, show_progress=show_progress)
 
-def train_epoch(data_loader:DataLoader, model:SGLC_Classifier, optimizer:torch.optim.Optimizer, verbose:bool=True, show_progress:bool=False):
+def train_epoch(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss:Loss, optimizer:torch.optim.Optimizer, verbose:bool=True, show_progress:bool=False):
     """For more info see the function :func:`train_or_eval`"""
-    return train_or_eval(data_loader=data_loader, model=model, optimizer=optimizer, verbose=verbose, show_progress=show_progress)
+    return train_or_eval(data_loader=data_loader, model=model, prediction_loss=prediction_loss, optimizer=optimizer, verbose=verbose, show_progress=show_progress)
 
-def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader, model:SGLC_Classifier, optimizer:torch.optim.Optimizer, num_epochs:int, verbose:bool=True, show_epoch_progress:bool=False):
+def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader, model:SGLC_Classifier, prediction_loss:Loss, optimizer:torch.optim.Optimizer, num_epochs:int, verbose:bool=True, show_epoch_progress:bool=False):
     """
     Train the model and evaluate its performance. Use static parameters from :data:`utils.constants_main` and :data:`utils.constants_eeg`
     to implement some operations.\\
@@ -321,6 +324,7 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
         val_loader (DataLoader):            Data on which evaluate the model
         test_loader (DataLoader):           Data on which test the model
         model (SGLCModel_classification):   Model to train or to evaluate
+        prediction_loss (Loss):             Prediction loss class to train the model
         optimizer (torch.optim.Optimizer):  Optimizer used for training
         num_epochs (int):                   Number of epochs for trainig
         verbose (bool):                     Useful for printing information during the execution of the evaluation method
@@ -333,7 +337,7 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     # using a dataloader of one batch with one item to compute dynamically the number of metrics and the name of metrics
     single_item_dataset= Subset(val_loader.dataset, indices=[0])
     single_item_dataloader = DataLoader(single_item_dataset, batch_size=1, shuffle=False)
-    dummy_metrics= eval(single_item_dataloader, model, verbose=False, show_progress=False)
+    dummy_metrics= eval(single_item_dataloader, model, prediction_loss, verbose=False, show_progress=False)
     metrics_name= [name for name,_ in dummy_metrics]
     num_metrics= len( metrics_name )
     
@@ -368,9 +372,9 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     )
     
     for epoch_num in tqdm(range(num_epochs), desc="Progress", unit="epoch"):
-        metrics_train= train_epoch(train_loader, model, optimizer, verbose=False, show_progress=(epoch_num==0))
-        metrics_val=   eval(val_loader,  model, verbose=verbose, show_progress=False)
-        metrics_test=  eval(test_loader, model, verbose=verbose, show_progress=False)
+        metrics_train= train_epoch(train_loader, model, prediction_loss, optimizer, verbose=False, show_progress=(epoch_num==0))
+        metrics_val=   eval(val_loader,  model, prediction_loss, verbose=verbose, show_progress=False)
+        metrics_test=  eval(test_loader, model, prediction_loss, verbose=verbose, show_progress=False)
 
         array_train[epoch_num] = np.array([value for _,value in metrics_train])
         array_val[epoch_num]   = np.array([value for _,value in metrics_val])
@@ -418,7 +422,7 @@ def main():
         dataset_data=[
             ('method', method),
             ('lambda_value', lambda_value),
-            ('scaler', type(scaler))
+            ('scaler', scaler)
         ]
     )
     string= "{}{}".format("\n\t", "\n\t".join([item for item in string_additional_info.split("\n")]))
@@ -468,7 +472,7 @@ def main():
         dataset.scaler= scaler
     
     # generate dataloaders
-    if (MIN_SAMPLER_PER_BATCH is not None):
+    if (MIN_SAMPLER_PER_BATCH == 0):
         test_sampler=  SeizureSampler(dataset.targets_list(), test_set.indices,  batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
         train_sampler= SeizureSampler(dataset.targets_list(), trian_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
         val_sampler=   SeizureSampler(dataset.targets_list(), val_set.indices,   batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
@@ -488,12 +492,14 @@ def main():
     dictionaries= [test_dict, train_dict, val_dict]
     ljust_value= len(max(names))
     
-    for name,dictionary in zip(names,dictionaries):    
+    for name,dictionary in zip(names,dictionaries):
+        string = "" 
         samples_pos, samples_neg = pos_neg_samples(dictionary)
-        LOGGER.info("Using patient(s) for {} : '{}'".format(name.ljust(ljust_value), ", ".join(dictionary.keys())))
-        LOGGER.info("\tTotal positive samples  : {:>{}}/{:,}".format(samples_pos, len(str(samples_pos+samples_neg)), samples_pos+samples_neg))
-        LOGGER.info("\tTotal negative samples  : {:>{}}/{:,}".format(samples_neg, len(str(samples_pos+samples_neg)), samples_pos+samples_neg))
-        LOGGER.info("\tPositive ratio          : {:.3f}%".format(100 * samples_pos / (samples_pos+samples_neg)))
+        string+= "Using patient(s) for {} : '{}'".format(name.ljust(ljust_value), ", ".join(dictionary.keys()))
+        string+= "\n\tTotal positive samples  : {:>{}}/{:,}".format(samples_pos, len(str(samples_pos+samples_neg)), samples_pos+samples_neg)
+        string+= "\n\tTotal negative samples  : {:>{}}/{:,}".format(samples_neg, len(str(samples_pos+samples_neg)), samples_pos+samples_neg)
+        string+= "\n\tPositive ratio          : {:.3f}%".format(100 * samples_pos / (samples_pos+samples_neg))
+        LOGGER.info(string)
     
     # load model if exists or create a new model
     LOGGER.info("Loading model...")
@@ -562,15 +568,16 @@ def main():
             loss = FocalLoss(num_classes=NUM_CLASSES, alpha=alpha, gamma=FOCAL_LOSS_GAMMA)
         case _:
             raise NotImplementedError("Loss {} is not implemented yet".format(loss_type))
-    LOGGER.info("Using loss type {} with parameters:\n{}".format(loss_type.name, dict_to_str(loss.parameters())))
+    loss_params_str = dict_to_str(list(loss.parameters().items()))
+    LOGGER.info("Using loss type '{}'{}".format(loss_type.name, '' if loss_params_str=="" else f' with parameters :\n{loss_params_str}'))
     
     # start train or evaluation
     if do_train:
         LOGGER.info(f'Start training : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
         optimizer= torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-        train(train_loader, val_loader, test_loader, model=model, optimizer=optimizer, num_epochs=num_epochs, verbose=verbose, show_epoch_progress=True)
+        train(train_loader, val_loader, test_loader, model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=num_epochs, verbose=verbose, show_epoch_progress=True)
     else:
-        eval(test_loader, model, verbose=True, show_progress=True)
+        eval(test_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
 
 if __name__=='__main__':
     main()

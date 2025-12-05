@@ -64,9 +64,9 @@ class SGLC_Cell(nn.Module):
         self.use_GRU= use_GRU
         self.graph_skip_conn= graph_skip_conn
         
-        if use_GRU and (hidden_dim_GGNN is None):
-            raise ValueError("hidden_dim_GGNN must not None")
-        if not(use_GRU) and (hidden_dim_GGNN is not None):
+        if use_GRU and ((hidden_dim_GGNN is None) or (hidden_dim_GGNN<=0)):
+            raise ValueError("hidden_dim_GGNN must be positive")
+        if not(use_GRU) and ((hidden_dim_GGNN is not None) and (hidden_dim_GGNN != 0)):
             warnings.warn("hidden_dim_GGNN is not used because use_GRU is False")
 
         keys_graph_learner = ["act", "v2", "concat", "beta"]
