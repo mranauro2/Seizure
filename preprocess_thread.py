@@ -313,7 +313,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir",       type=str,            default=None,        help="Root directory where save the preprocessed data")
     parser.add_argument("--use_fft",        action='store_true', default=False,       help="Use the Fast Fourier Transform when obtain the slice from the file. Used only if --save_dir is not None")
     parser.add_argument("--overwrite",      action='store_true', default=False,       help="Overwrite existing segment files. If not set, existing files will be skipped")
-    parser.add_argument("--partial_overlap",action='store_true', default=False,       help="If True the overlap must be complete. The interval of the segmented data must be completely inside the seizure event to be labeled as seizure")
+    parser.add_argument("--partial_overlap",action='store_true', default=False,       help="If False the overlap must be complete. The interval of the segmented data must be completely inside the seizure event to be labeled as seizure")
     parser.add_argument("--seq_len",        type=int,            default=4,           help="Length of each segment window in seconds")
     parser.add_argument("--z_fill",         type=int,            default=3,           help="Number of digits for zero-padding segment indices")
     parser.add_argument("--delete",         action='store_true', default=False,       help="Delete the output file if already exists")
