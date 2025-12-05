@@ -186,7 +186,7 @@ class SGLC_Classifier(nn.Module):
                         
             hidden_dim_GGNN:int=None,
             num_steps:int=5,
-            use_GRU_in_GGNN:bool=True,
+            use_GRU_in_GGNN:bool=False,
             
             device:str=None,
             **kwargs
@@ -229,14 +229,14 @@ class SGLC_Classifier(nn.Module):
             'graph_skip_conn': graph_skip_conn,
             'use_GRU': use_GRU,
             'hidden_dim_GL': hidden_dim_GL,
-            'attention_type': attention_type,
+            'attention_type': attention_type.name,
             'num_layers': num_layers,
             'num_heads': num_heads,
             'dropout': dropout,
             'epsilon': epsilon,
             'hidden_dim_GGNN': hidden_dim_GGNN,
             'num_steps': num_steps,
-            'use_propagator': use_GRU_in_GGNN,
+            'use_GRU_in_GGNN': use_GRU_in_GGNN,
             'device': device
         }
         self.config.update(kwargs)
@@ -337,6 +337,10 @@ class SGLC_Classifier(nn.Module):
         checkpoint = torch.load(filepath, map_location=device)
         
         config = checkpoint['config']
+        
+        # Convert attention_type string back to enum
+        if isinstance(config['attention_type'], str):
+            config['attention_type'] = GraphLearnerAttention[config['attention_type']]
         
         # Override device if specified
         if device:
