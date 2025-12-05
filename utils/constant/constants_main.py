@@ -17,6 +17,9 @@ SCALER_SAVE_FOLDER= "./scalars_weight"
 MODEL_NAME= "Model"
 """Name of the file where the model will be saved"""
 
+EPOCH_FOLDER_NAME= "epoch"
+"""Name of the folder where the metrics will be saved"""
+
 MODEL_EXTENTION= "pth"
 """Extention of the model weights"""
 
@@ -37,7 +40,7 @@ PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""
 
 PERCENTAGE_BOTH_CLASS_IN_BATCH= 1
-"""Min percentage number of both class in a batch"""
+"""Min percentage number of both class in a batch. If set to None does not use a sampler in the DataLoader"""
 
 BATCH_SIZE= 64
 """Batch size used during the training. The last batch can have different size"""

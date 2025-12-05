@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from sklearn.metrics import confusion_matrix
 
-class Average_Meter:
+class Loss_Meter:
     """Keep track of average losses over time"""
     def __init__(self, name:str=""):
         """
@@ -20,7 +20,7 @@ class Average_Meter:
     
     def get_metric(self) -> tuple[str, float]:
         """Returns the name of the loss and the value of the average loss"""
-        name= "average" if len(self.name)==0 else f"average_{self.name}"
+        name= "loss" if len(self.name)==0 else f"loss_{self.name}"
         if self.count == 0:
             return  name, 0.0
         return name, self.sum/self.count

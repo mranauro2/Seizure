@@ -47,13 +47,13 @@ How to compute the adjacency matrix"""
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 DAMP_SMOOTH= 0.0
-"""Damping factor for :func:`model.loss_functions.smoothness_loss_func`"""
+"""Damping factor for :func:`model.loss_functions.smoothness_loss_func`. Set to 0 to not use it"""
 
 DAMP_DEGREE= 0.0
-"""Damping factor for :func:`model.loss_functions.degree_regularization_loss_func`"""
+"""Damping factor for :func:`model.loss_functions.degree_regularization_loss_func`. Set to 0 to not use it"""
 
 DAMP_SPARSITY= 0.0
-"""Damping factor for :func:`model.loss_functions.sparsity_loss_func`"""
+"""Damping factor for :func:`model.loss_functions.sparsity_loss_func`. Set to 0 to not use it"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # INFO FOR model.ASGPFmodel.SGLCModel_classification

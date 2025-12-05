@@ -10,10 +10,7 @@ import torch
 # ABSTRACT CLASS
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-class Loss(ABC):
-    def __init__(self):
-        self.__call__= self.compute_loss
-    
+class Loss(ABC):    
     """Abstract Scaler class to normalize the data"""
     @abstractmethod
     def compute_loss(self, result:Tensor, target:Tensor) -> Tensor:
@@ -22,7 +19,7 @@ class Loss(ABC):
         
         Args:
             result (Tensor):    Result of the model with size (batch_size, num_classes)
-            target (Tensor):    Target value with size (batch_size)
+            target (Tensor):    Target value with size (batch_size, 1)
         
         Returns:
             loss (Tensor):      Loss of shape (batch_size)
@@ -86,4 +83,4 @@ class CrossEntropy(Loss):
         self.weight = weight
     
     def compute_loss(self, result:Tensor, target:Tensor):
-        return cross_entropy(result, target.to(dtype=torch.int64), weight=self.weight, reduction='none')
+        return cross_entropy(result, target.squeeze(-1).to(dtype=torch.int64), weight=self.weight, reduction='none')

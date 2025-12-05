@@ -3,7 +3,6 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 import torch
-from torch.nn import Module
 from torch.utils.data import DataLoader, Subset
 
 from utils.classes.Checkpoint_manager import CheckPoint
@@ -18,10 +17,8 @@ from data.dataloader.dataloader import SeizureDataset, SeizureSampler
 
 from model.loss.loss_regularization import *
 from model.SGLCModel import SGLC_Classifier
-from model.loss.LossType import LossType
 from model.loss.loss_classes import *
 
-from torchvision.ops import sigmoid_focal_loss
 from torch.nn.functional import one_hot
 from train_args import parse_arguments
 
@@ -29,6 +26,8 @@ from datetime import datetime
 from tqdm.auto import tqdm
 import numpy as np
 import logging
+import random
+import string
 import os
 import re
 
@@ -37,13 +36,21 @@ import re
 # GLOBAL VARIABLE
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-MIN_SAMPLE_PER_CLASS=  max(1, round( PERCENTAGE_BOTH_CLASS_IN_BATCH/100 * BATCH_SIZE ))
-MIN_SAMPLER_PER_BATCH= max(1, round( PERCENTAGE_BOTH_CLASS_IN_BATCH/100 * BATCH_SIZE ))
+MIN_SAMPLER_PER_BATCH= max(1, round( PERCENTAGE_BOTH_CLASS_IN_BATCH/100 * BATCH_SIZE )) if (PERCENTAGE_BOTH_CLASS_IN_BATCH is None) else None
+"""If not None, min number of both class in a batch"""
+
+START_EPOCH= 0
+"""Number of train epochs of the loaded model before the training"""
+
+def generate_id(char_num:int, chars:str=string.ascii_lowercase+string.digits):
+    """Generate a random id with a certain number of chars using a string"""
+    return ''.join(random.choices(chars, k=char_num))
+STOP_FILE = "./stop_execution_{}.txt".format(generate_id(3))
+"""Stop file to use to stop the execution and save the model without wait the checkpoint"""
 
 DEVICE= "cpu"
 NUM_SEIZURE_DATA= 0
 NUM_NOT_SEIZURE_DATA= 0
-START_EPOCH= 0
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -104,6 +111,15 @@ def scaler_file_patient_ids(dictionary:dict[str, list[int]], separator:str="-") 
         >>> '02 - 04 - 05 - 06 - 07 - 09 - 10 - 11 - 12 - 14 - 15 - 17 - 18 - 20 - 21 - 22 - 23 - 24'
     """
     return separator.join(sorted([key.replace("chb", "") for key in dictionary.keys()], key=lambda x : int(x)))
+
+def check_stop_file():
+    """Check if the stop file exists"""
+    return os.path.exists(STOP_FILE)
+
+def delete_stop_file():
+    """Delete the stop file if exists"""
+    if check_stop_file():
+        os.remove(STOP_FILE)
 
 def func_operation(x:Tensor) -> Tensor:
     """Operation to apply at the scaler"""
@@ -203,13 +219,13 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
     model.train(is_training)
     
     # init metrics
-    average_total= Average_Meter("total")
-    average_pred= Average_Meter("pred")
-    average_smooth= Average_Meter("smooth")
-    average_degree= Average_Meter("degree")
-    average_sparsity= Average_Meter("sparsity")
-    accuracy= Accuracy_Meter([NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA], num_classes=NUM_CLASSES)
-    conf_matrix= ConfusionMatrix_Meter(NUM_CLASSES)
+    average_smooth   = Loss_Meter("smooth")   if (DAMP_SMOOTH!=0)   else None
+    average_degree   = Loss_Meter("degree")   if (DAMP_DEGREE!=0)   else None
+    average_sparsity = Loss_Meter("sparsity") if (DAMP_SPARSITY!=0) else None
+    average_pred     = Loss_Meter("pred")     if (average_smooth or average_degree or average_sparsity) else None
+    average_total    = Loss_Meter("total" if average_pred else "")
+    accuracy         = Accuracy_Meter([NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA], num_classes=NUM_CLASSES)
+    conf_matrix      = ConfusionMatrix_Meter(NUM_CLASSES)
     
     # enable or not the gradients
     with (torch.enable_grad() if is_training else torch.no_grad()):
@@ -244,21 +260,23 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
             # update metrics from (batch_size,1) to (batch_size)
             target= target.squeeze(-1)
             average_total.update(total_loss)
-            average_pred.update(loss_pred)
-            average_smooth.update(DAMP_SMOOTH*loss_smooth)
-            average_degree.update(DAMP_DEGREE*loss_degree)
-            average_sparsity.update(DAMP_SPARSITY*loss_sparsity)
             accuracy.update(result, target)
             conf_matrix.update(result, target)
+            
+            loss_tuple:list[tuple[Loss_Meter,Tensor]]=[
+                (average_pred,     loss_pred),
+                (average_smooth,   DAMP_SMOOTH*loss_smooth),
+                (average_degree,   DAMP_DEGREE*loss_degree),
+                (average_sparsity, DAMP_SPARSITY,loss_sparsity)
+            ]
+            for average,loss in loss_tuple:
+                if (average is not None):
+                    average.update(loss)
     
     model.eval()
     
     metrics= [
         average_total.get_metric(),
-        average_pred.get_metric(),
-        average_smooth.get_metric(),
-        average_degree.get_metric(),
-        average_sparsity.get_metric(),
         accuracy.get_metric(),
         *accuracy.get_class_accuracy(),
         *accuracy.get_avg_target_prob(),
@@ -266,6 +284,9 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
         conf_matrix.get_recall(),
         conf_matrix.get_f1_score()
     ]
+    for average,_ in loss_tuple:
+        if (average is not None):
+            metrics.extend(average.get_metric())
     
     # print metrics during execution
     if verbose:
@@ -305,6 +326,10 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
         verbose (bool):                     Useful for printing information during the execution of the evaluation method
         show_progress (bool):               Show the inner progress bar. The progress bar is removed when terminated
     """
+    # print the information about the stop file to interrupt the training
+    LOGGER.info("To stop the execution create the file '{}' in the current folder".format(os.path.basename(STOP_FILE)))
+    delete_stop_file()
+    
     # using a dataloader of one batch with one item to compute dynamically the number of metrics and the name of metrics
     single_item_dataset= Subset(val_loader.dataset, indices=[0])
     single_item_dataloader = DataLoader(single_item_dataset, batch_size=1, shuffle=False)
@@ -313,9 +338,16 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     num_metrics= len( metrics_name )
     
     # generate the metrics array
-    array_train= np.empty((num_epochs, num_metrics), dtype=np.float64)
-    array_val=   np.empty((num_epochs, num_metrics), dtype=np.float64)
-    array_test=  np.empty((num_epochs, num_metrics), dtype=np.float64)
+    array_train= np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
+    array_val=   np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
+    array_test=  np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
+    
+    # fusion with old metrics if exist
+    if START_EPOCH!=0:
+        epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
+        for index,name in enumerate(metrics_name):
+            position = os.path.join(epoch_folder, f"{name}_{START_EPOCH}.{METRICS_EXTENTION}")
+            array_train[0:START_EPOCH, index], array_val[0:START_EPOCH, index], array_test[0:START_EPOCH, index] = Metrics.load(position)
     
     # real training
     higher_is_better= False
@@ -340,23 +372,24 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
         metrics_val=   eval(val_loader,  model, verbose=verbose, show_progress=False)
         metrics_test=  eval(test_loader, model, verbose=verbose, show_progress=False)
 
-        array_train[epoch_num]= np.array([value for _,value in metrics_train])
-        array_val[epoch_num]=   np.array([value for _,value in metrics_val])
-        array_test[epoch_num]=  np.array([value for _,value in metrics_test])
+        array_train[epoch_num] = np.array([value for _,value in metrics_train])
+        array_val[epoch_num]   = np.array([value for _,value in metrics_val])
+        array_test[epoch_num]  = np.array([value for _,value in metrics_test])
         
         used_metric= metrics_val[0][1]
         
+        # save the metrics at each iteration
+        for index,name in enumerate(metrics_name):
+            position= os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{epoch_num+START_EPOCH+1}", f"{name}_{epoch_num+START_EPOCH+1}.{METRICS_EXTENTION}")
+            until_epoch = epoch_num+START_EPOCH+1
+            Metrics.save(position, train_metric=array_train[0:until_epoch, index], val_metric=array_val[0:until_epoch, index], test_metric=array_test[0:until_epoch, index])
+        
         # conditions to save the model
         saved_files= []
-        if checkpoint_observer.check_saving(used_metric) or checkpoint_observer.check_early_stop():
+        if checkpoint_observer.check_saving(used_metric) or checkpoint_observer.check_early_stop() or check_stop_file():
             file_path= f"{MODEL_PARTIAL_PATH}_{epoch_num+START_EPOCH+1}.{MODEL_EXTENTION}"
             saved_files.append(file_path)
             model.save(file_path)
-            
-            for index,name in enumerate(metrics_name):
-                position= os.path.join(METRICS_SAVE_FOLDER, f"epoch_{epoch_num+START_EPOCH+1}", f"{name}_{epoch_num+START_EPOCH+1}.{METRICS_EXTENTION}")
-                saved_files.append(position)
-                Metrics.save(position, train_metric=array_train[0:epoch_num+1, index], val_metric=array_val[0:epoch_num+1, index], test_metric=array_test[0:epoch_num+1, index])
             
             checkpoint_observer.update_saving(used_metric, saved_files)
         
@@ -366,6 +399,11 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
         # check the early stop
         if checkpoint_observer.check_early_stop():
             LOGGER.warning(f"Reached early stop at epoch {epoch_num}")
+            break
+        
+        # check stop file
+        if check_stop_file():
+            LOGGER.warning("Stop file '{}' found. Stopped at epoch {}".format(os.path.basename(STOP_FILE), epoch_num))
             break
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -419,7 +457,7 @@ def main():
         LOGGER.info(f"Loading scaler '{scaler.name}'...")
         scaler_name= "{}{}_{}.{}".format(scaler.name, '_single' if single_scaler else "", scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
         scaler_path= os.path.join(SCALER_SAVE_FOLDER, scaler_name)
-        scaler= ConcreteScaler().create_scaler(scaler, device=DEVICE)
+        scaler= ConcreteScaler.create_scaler(scaler, device=DEVICE)
     
     if (scaler is not None):
         if os.path.exists(scaler_path):
@@ -430,9 +468,12 @@ def main():
         dataset.scaler= scaler
     
     # generate dataloaders
-    test_sampler=  SeizureSampler(dataset.targets_list(), test_set.indices,  batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
-    train_sampler= SeizureSampler(dataset.targets_list(), trian_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
-    val_sampler=   SeizureSampler(dataset.targets_list(), val_set.indices,   batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+    if (MIN_SAMPLER_PER_BATCH is not None):
+        test_sampler=  SeizureSampler(dataset.targets_list(), test_set.indices,  batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+        train_sampler= SeizureSampler(dataset.targets_list(), trian_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+        val_sampler=   SeizureSampler(dataset.targets_list(), val_set.indices,   batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+    else:
+        test_sampler, train_sampler, val_sampler = None, None, None
 
     test_loader=  DataLoader(dataset, sampler=test_sampler,  batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
     train_loader= DataLoader(dataset, sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)

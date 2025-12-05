@@ -223,8 +223,8 @@ class SeizureSampler(Sampler):
         Args:
             labels (list[bool]):        Boolean list representing class labels (True/False) for each sample
             valid_indices (list[int]):  List of valid indices that can be used for sampling
-            batch_size (int):           The batch size for each iteration.
-            n_per_class (int):          Minimum number of samples per class in each batch.
+            batch_size (int):           The batch size for each iteration
+            n_per_class (int):          Minimum number of samples per class in each batch
             seed (int):                 Random seed for reproducibility. If None the seed will be not custom initialize
         
         Raises:
