@@ -369,19 +369,20 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     
     for epoch_num in tqdm(range(num_epochs), desc="Progress", unit="epoch"):
         metrics_train= train_epoch(train_loader, model, prediction_loss, optimizer, verbose=False, show_progress=(epoch_num==0))
-        metrics_val=   eval(val_loader,  model, prediction_loss, verbose=verbose, show_progress=False)
-        metrics_test=  eval(test_loader, model, prediction_loss, verbose=verbose, show_progress=False)
+        metrics_val=   eval(val_loader,  model, prediction_loss, verbose=verbose, show_progress=show_epoch_progress)
+        metrics_test=  eval(test_loader, model, prediction_loss, verbose=verbose, show_progress=show_epoch_progress)
 
-        array_train[epoch_num] = np.array([value for _,value in metrics_train])
-        array_val[epoch_num]   = np.array([value for _,value in metrics_val])
-        array_test[epoch_num]  = np.array([value for _,value in metrics_test])
+        current_idx = START_EPOCH + epoch_num
+        array_train[current_idx] = np.array([value for _,value in metrics_train])
+        array_val[current_idx]   = np.array([value for _,value in metrics_val])
+        array_test[current_idx]  = np.array([value for _,value in metrics_test])
         
         used_metric= metrics_val[0][1]
         
         # save the metrics at each iteration
         for index,name in enumerate(metrics_name):
             position= os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{epoch_num+START_EPOCH+1}", f"{name}_{epoch_num+START_EPOCH+1}.{METRICS_EXTENTION}")
-            until_epoch = epoch_num+START_EPOCH+1
+            until_epoch = START_EPOCH+epoch_num+1
             Metrics.save(position, train_metric=array_train[0:until_epoch, index], val_metric=array_val[0:until_epoch, index], test_metric=array_test[0:until_epoch, index])
         
         # conditions to save the model
@@ -404,6 +405,7 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
         # check stop file
         if check_stop_file():
             LOGGER.warning("Stop file '{}' found. Stopped at epoch {}".format(os.path.basename(STOP_FILE), epoch_num))
+            delete_stop_file()
             break
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -447,10 +449,10 @@ def main():
     # splitting data
     remaining_data, test_dict = split_patient_data_specific(dataset.targets_dict(), TEST_PATIENT_IDS)
     train_dict, val_dict = split_patient_data(remaining_data, split_ratio=PERCENTAGE_TRAINING_SPLIT)
-
-    test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict)
+    
     trian_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
     val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
+    test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict)
     
     # generating new scaler
     if (scaler is not None):
@@ -468,16 +470,13 @@ def main():
         dataset.scaler= scaler
     
     # generate dataloaders
+    train_sampler = None
     if (MIN_SAMPLER_PER_BATCH == 0):
-        test_sampler=  SeizureSampler(dataset.targets_list(), test_set.indices,  batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
         train_sampler= SeizureSampler(dataset.targets_list(), trian_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
-        val_sampler=   SeizureSampler(dataset.targets_list(), val_set.indices,   batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
-    else:
-        test_sampler, train_sampler, val_sampler = None, None, None
 
-    test_loader=  DataLoader(dataset, sampler=test_sampler,  batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
-    train_loader= DataLoader(dataset, sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
-    val_loader=   DataLoader(dataset, sampler=val_sampler,   batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
+    train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
+    test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
+    val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
     
     # print on screen some informations
     def pos_neg_samples(dictionary:dict[str, list[int]]):
@@ -502,46 +501,46 @@ def main():
     DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
     LOGGER.info(f"Using {DEVICE} device...")
     
+    feature_matrix, _, _ = dataset[0]
+    num_nodes= feature_matrix.size(1)
+    input_dim= feature_matrix.size(2)
+            
+    model= SGLC_Classifier(
+        num_classes     = NUM_CLASSES,
+        
+        num_cells       = NUM_CELLS,
+        input_dim       = input_dim,
+        num_nodes       = num_nodes,
+        
+        graph_skip_conn = GRAPH_SKIP_CONN,
+        use_GRU         = USE_GRU,
+        
+        hidden_dim_GL   = HIDDEN_DIM_GL,
+        attention_type  = ATTENTION_TYPE,
+        num_layers      = NUM_LAYERS,
+        num_heads       = NUM_HEADS,
+        dropout         = DROPOUT,
+        epsilon         = EPSILON,
+        
+        hidden_dim_GGNN = HIDDEN_DIM_GGNN,
+        num_steps       = NUM_STEPS,
+        use_GRU_in_GGNN = USE_GRU_IN_GGNN,
+        
+        act             = ACT,
+        v2              = USE_GATv2,
+        concat          = CONCAT,
+        beta            = BETA,
+        
+        device          = DEVICE
+    )
+    
     filename, num_epoch = get_model(MODEL_SAVE_FOLDER, specific_num=save_num)
     START_EPOCH= num_epoch
     if len(filename)==0 and (not do_train):
         raise ValueError(f"Evaluation stopped, model not present in the '{MODEL_SAVE_FOLDER}' folder")
     if len(filename)!=0:
-        model= SGLC_Classifier.load(filename, device=DEVICE)
+        model= model.load(filename, device=DEVICE)
         LOGGER.info(f"Loaded '{os.path.basename(filename)}'...")
-    else:        
-        feature_matrix, _, _ = dataset[0]
-        num_nodes= feature_matrix.size(1)
-        input_dim= feature_matrix.size(2)
-                
-        model= SGLC_Classifier(
-            num_classes     = NUM_CLASSES,
-            
-            num_cells       = NUM_CELLS,
-            input_dim       = input_dim,
-            num_nodes       = num_nodes,
-            
-            graph_skip_conn = GRAPH_SKIP_CONN,
-            use_GRU         = USE_GRU,
-            
-            hidden_dim_GL   = HIDDEN_DIM_GL,
-            attention_type  = ATTENTION_TYPE,
-            num_layers      = NUM_LAYERS,
-            num_heads       = NUM_HEADS,
-            dropout         = DROPOUT,
-            epsilon         = EPSILON,
-            
-            hidden_dim_GGNN = HIDDEN_DIM_GGNN,
-            num_steps       = NUM_STEPS,
-            use_GRU_in_GGNN = USE_GRU_IN_GGNN,
-            
-            act             = ACT,
-            v2              = USE_GATv2,
-            concat          = CONCAT,
-            beta            = BETA,
-            
-            device          = DEVICE
-        )    
     
     # set the number of seizure and not seizure data
     NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = pos_neg_samples(train_dict)
@@ -551,10 +550,8 @@ def main():
         raise ValueError(f"Training aborted, no data with seizure")
     
     # create loss to use
-    weight_seizure      = NUM_NOT_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
-    weight_not_seizure  = NUM_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
-    pos_weight          = torch.Tensor([weight_seizure, weight_not_seizure]).to(device=DEVICE) if USE_WEIGHT else None
-    alpha               = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else weight_seizure
+    pos_weight          = torch.Tensor([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA]).to(device=DEVICE) if USE_WEIGHT else None
+    alpha               = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else NUM_NOT_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
     match loss_type:
         case LossType.CROSS_ENTROPY:
             loss = CrossEntropy(weight=pos_weight)

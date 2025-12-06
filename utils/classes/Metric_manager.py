@@ -41,6 +41,7 @@ class Metrics():
         Load the metric at in a specific file. If the file does not exists raise an Exception
             :param file_path (str): File name where the data will be loaded. The `.npz` extension will be appended to the filename if it is not already there
             :return tuple(np.ndarray, np.ndarray, np.ndarray):  The array will be: train_metric, val_metric, test_metric
+            :raise ValueError: If the file does not exist
         """
         file_path= file_path if file_path.endswith(".npz") else f"{file_path}.npz"
         if not os.path.exists(file_path):
