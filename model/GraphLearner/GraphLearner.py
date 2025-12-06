@@ -120,7 +120,7 @@ class GraphLearner(nn.Module):
             for curr_num_heads in range(num_heads, 0, -1):
                 if (hidden_size % curr_num_heads == 0):
                     if (curr_num_heads != num_heads):
-                        msg = "There are more layers, the number of heads is reduced from ({}) to ({}), otherwise the intermediate output would have been ({}) instead of ({})".format(num_heads, curr_num_heads, num_heads * (hidden_size//num_heads), hidden_size)
+                        msg = "There are {} layers, the number of heads is reduced from ({}) to ({}), otherwise the intermediate output would have been ({}) instead of ({})".format(num_layers, num_heads, curr_num_heads, num_heads * (hidden_size//num_heads), hidden_size)
                         warnings.warn(msg)
                         num_heads = curr_num_heads
                     break

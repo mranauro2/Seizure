@@ -95,7 +95,7 @@ class GGNNLayer(nn.Module):
             self.propagator = Propogator(input_dim, device=device)
 
         self.fc = nn.Linear(input_dim, output_dim, device=device)
-
+    
     def forward(self, inputs:Tensor, supports:Tensor) -> Tensor:
         """
         Compute the new representation of the feature/node matrix via iterative propagation:

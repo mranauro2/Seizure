@@ -6,6 +6,7 @@ from model.SGLCell import SGLC_Cell
 from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 
 import os
+import warnings
 from enum import Enum
 from types import NoneType
 
@@ -226,27 +227,6 @@ class SGLC_Classifier(nn.Module):
         self.params.update(self.params.pop("kwargs"))
         self.params.pop('self')
         self.params.pop('__class__')
-
-        # Store configuration for saving with key : (value, critical_value)
-        self.config:dict[str, tuple[any,bool]] = {
-            'num_classes':      (num_classes, True),
-            'num_cells':        (num_cells, True),
-            'input_dim':        (input_dim, True),
-            'num_nodes':        (num_nodes, True),
-            'graph_skip_conn':  (graph_skip_conn, False),
-            'use_GRU':          (use_GRU, True),
-            'hidden_dim_GL':    (hidden_dim_GL, True),
-            'attention_type':   (attention_type, True),
-            'num_layers':       (num_layers, True),
-            'num_heads':        (num_heads, True),
-            'dropout':          (dropout, False),
-            'epsilon':          (epsilon, False),
-            'hidden_dim_GGNN':  (hidden_dim_GGNN, True),
-            'num_steps':        (num_steps, False),
-            'use_GRU_in_GGNN':  (use_GRU_in_GGNN, True),
-            'device':           (device, False)
-        }
-        self.config.update(kwargs)
         
         self.use_GRU= use_GRU
         self.device= device
@@ -329,11 +309,9 @@ class SGLC_Classifier(nn.Module):
             
             return value
         
-        dict_to_save = {}
-        for (conf_key, _), (local_key, local_value) in zip(self.config.items(), self.params.items()):
-            if conf_key != local_key:
-                raise ValueError("Key '{}' not found in the function __init__".format(conf_key))
-            dict_to_save[local_key] = _from_type_to_value(local_key, local_value)
+        dict_to_save:dict[str,any] = {}
+        for key,value in self.params.items():
+            dict_to_save[key] = _from_type_to_value(key, value)
         
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         
@@ -343,37 +321,6 @@ class SGLC_Classifier(nn.Module):
         }
         
         torch.save(save_dict, filepath)
-
-    def old_load(self, filepath:str, device:str=None):
-        """
-        Load a saved model from a file.
-        
-        Args:
-            filepath (str): Path to the saved model file
-            device (str):   Device to place the model on. If None, uses the device from saved config
-            
-        Returns:
-            SGLCModel_classification: Loaded model instance
-        """
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"Model file not found: {filepath}")
-        
-        checkpoint = torch.load(filepath, map_location=device)
-        
-        config = checkpoint['config']
-        
-        # Convert attention_type string back to enum
-        if isinstance(config['attention_type'], str):
-            config['attention_type'] = GraphLearnerAttention[config['attention_type']]
-        
-        # Override device if specified
-        if device:
-            config['device'] = device
-        
-        model = SGLC_Classifier(**config)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        
-        return model
     
     def load(self, filepath:str, strict:bool=False, device:str=None):
         """
@@ -381,7 +328,7 @@ class SGLC_Classifier(nn.Module):
         
         Args:
             filepath (str): Path to the saved model file
-            strict (bool):  If True, raise exception for any mismatches. If False, raises exception on critical mismatches
+            strict (bool):  If True, raise exception for any mismatches, otherwise print a warning
             device (str):   Device to place the model on. If None, uses the device from saved config
             
         Returns:
@@ -402,21 +349,28 @@ class SGLC_Classifier(nn.Module):
             raise FileNotFoundError(f"Model file not found: {filepath}")
 
         checkpoint = torch.load(filepath, map_location=device)
-        checkpoint_config = checkpoint['config']
-        checkpoint_config['device'] = device if (device is not None) else checkpoint_config['device']
+        conf:dict[str,any] = checkpoint['config']
+        conf['device'] = device if (device is not None) else conf['device']
         
-        try:
-            for (checkpoint_key,checkpoint_value),(conf_value,conf_critical) in zip(checkpoint_config.items(), self.config.values()):
-                pass
-        except ValueError:
-            return self.old_load(filepath, device)
+        conf_set = set(conf.keys())
+        param_set = set(self.params.keys())
+        for key in conf_set.difference(param_set):
+            raise ValueError("Key '{}' is loaded but not present in the model".format(key))
+        for key in param_set.difference(conf_set):
+            msg ="Key '{}' is in the model but not loaded".format(key)
+            if strict:
+                raise ValueError(msg)
+            warnings.warn(msg)
         
-        dict_to_load = {}
-        for (checkpoint_key,checkpoint_value),(conf_value,conf_critical) in zip(checkpoint_config.items(), self.config.values()):
-            new_value =  _from_value_to_type(checkpoint_key, checkpoint_value, type(conf_value))
-            if (strict or conf_critical) and (new_value!=conf_value):
-                raise ValueError("Key '{}' ({}critical) should be '{}' but got '{}'".format(checkpoint_key, '' if conf_critical else 'not ' ,new_value, conf_value))
-            dict_to_load[checkpoint_key]= new_value
+        dict_to_load:dict[str,any] = {}
+        for key in conf.keys():
+            conf_value = _from_value_to_type(key, conf[key], type(self.params[key]))
+            if conf_value != self.params[key]:
+                msg ="Key '{}' has value ({}) but ({}) was expected".format(key, conf_value, self.params[key])
+                if strict:
+                    raise ValueError(msg)
+                warnings.warn(msg)
+            dict_to_load[key] = conf_value
         
         model = SGLC_Classifier(**dict_to_load)
         model.load_state_dict(checkpoint['model_state_dict'])

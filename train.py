@@ -368,7 +368,7 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     )
     
     for epoch_num in tqdm(range(num_epochs), desc="Progress", unit="epoch"):
-        metrics_train= train_epoch(train_loader, model, prediction_loss, optimizer, verbose=False, show_progress=(epoch_num==0))
+        metrics_train= train_epoch(train_loader, model, prediction_loss, optimizer, verbose=False, show_progress=True)
         metrics_val=   eval(val_loader,  model, prediction_loss, verbose=verbose, show_progress=show_epoch_progress)
         metrics_test=  eval(test_loader, model, prediction_loss, verbose=verbose, show_progress=show_epoch_progress)
 
@@ -550,13 +550,16 @@ def main():
         raise ValueError(f"Training aborted, no data with seizure")
     
     # create loss to use
-    pos_weight          = torch.Tensor([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA]).to(device=DEVICE) if USE_WEIGHT else None
-    alpha               = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else NUM_NOT_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
+    neg_weight = 1.0
+    pos_weight = NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA
+    weight = torch.Tensor([neg_weight/(pos_weight+neg_weight), pos_weight/(pos_weight+neg_weight)]).to(device=DEVICE) if USE_WEIGHT else None
+    # weight = torch.Tensor([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA]).to(device=DEVICE) if USE_WEIGHT else None
+    alpha = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else NUM_NOT_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
     match loss_type:
         case LossType.CROSS_ENTROPY:
-            loss = CrossEntropy(weight=pos_weight)
+            loss = CrossEntropy(weight=weight)
         case LossType.BCE_LOGITS:
-            loss = BCE_Logits(num_classes=NUM_CLASSES, pos_weight=pos_weight)
+            loss = BCE_Logits(num_classes=NUM_CLASSES, pos_weight=weight)
         case LossType.FOCAL_LOSS:
             loss = FocalLoss(num_classes=NUM_CLASSES, alpha=alpha, gamma=FOCAL_LOSS_GAMMA)
         case _:
