@@ -366,7 +366,7 @@ class SGLC_Classifier(nn.Module):
         for key in conf.keys():
             conf_value = _from_value_to_type(key, conf[key], type(self.params[key]))
             if conf_value != self.params[key]:
-                msg ="Key '{}' has value ({}) but ({}) was expected".format(key, conf_value, self.params[key])
+                msg ="Key '{}' has value ({}) but ({}) was expected".format(key, self.params[key], conf_value)
                 if strict:
                     raise ValueError(msg)
                 warnings.warn(msg)

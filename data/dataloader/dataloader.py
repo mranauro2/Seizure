@@ -163,7 +163,7 @@ class SeizureDataset(Dataset):
         return utils.cross_correlation(curr_feature, self.top_k)
     
     def _compute_plv(self, curr_feature:np.ndarray|Tensor):
-        curr_feature= curr_feature.numpy()
+        curr_feature= curr_feature.numpy() if isinstance(curr_feature, Tensor) else curr_feature
         curr_feature= curr_feature.transpose((1,0,2)).reshape(curr_feature.shape[1], -1)
         return utils.compute_plv_matrix(curr_feature)
     

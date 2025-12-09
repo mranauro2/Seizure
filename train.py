@@ -22,7 +22,7 @@ from model.loss.loss_classes import *
 from torch.nn.functional import one_hot
 from train_args import parse_arguments
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from tqdm.auto import tqdm
 import numpy as np
 import logging
@@ -58,6 +58,40 @@ LOGGER = logging.getLogger(__name__)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # UTILS
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class TqdmMinutes(tqdm):
+    """
+    Custom tqdm:
+      - switches s/it → min/it when iteration time > 60 sec
+      - adds ETA clock time in HH:MM
+    """
+    def __init__(self, *args, bar_format=None, **kwargs):
+        # if caller does not supply bar_format → use default
+        if bar_format is None:
+            bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] ETA:{eta_clock}"
+        super().__init__(*args, bar_format=bar_format, **kwargs)
+    
+    @property
+    def format_dict(self):
+        d = super().format_dict
+
+        # ---- determine if switching to minutes ----
+        rate = d["rate"]  # iterations per second
+        if rate and rate > 0:
+            sec_per_iter = 1.0 / rate
+            if sec_per_iter > 60:
+                min_per_iter = sec_per_iter / 60
+                d["rate_fmt"] = f"{min_per_iter:0.2f}min/{d['unit']}"
+
+        # ---- ETA as a clock time ----
+        remaining = (self.total - self.n) / rate if rate and self.total else None
+        if remaining is not None:
+            finish = datetime.now() + timedelta(seconds=remaining)
+            d["eta_clock"] = finish.strftime("%H:%M:%S")
+        else:
+            d["eta_clock"] = "--:--"
+        
+        return d
 
 def get_model(dir:str, specific_num:int=None) -> tuple[str, int]:
     """
@@ -367,10 +401,10 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
         "\tearly_stop_start : {}".format(early_stop_start)
     )
     
-    for epoch_num in tqdm(range(num_epochs), desc="Progress", unit="epoch"):
-        metrics_train= train_epoch(train_loader, model, prediction_loss, optimizer, verbose=False, show_progress=True)
-        metrics_val=   eval(val_loader,  model, prediction_loss, verbose=verbose, show_progress=show_epoch_progress)
-        metrics_test=  eval(test_loader, model, prediction_loss, verbose=verbose, show_progress=show_epoch_progress)
+    for epoch_num in TqdmMinutes(range(num_epochs), desc="Progress", unit="epoch"):
+        metrics_train= train_epoch(train_loader, model, prediction_loss, optimizer, verbose=False, show_progress=(epoch_num==0))
+        metrics_val=   eval(val_loader,  model, prediction_loss, verbose=verbose, show_progress=(epoch_num==0))
+        metrics_test=  eval(test_loader, model, prediction_loss, verbose=verbose, show_progress=(epoch_num==0))
 
         current_idx = START_EPOCH + epoch_num
         array_train[current_idx] = np.array([value for _,value in metrics_train])
@@ -399,12 +433,12 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
         
         # check the early stop
         if checkpoint_observer.check_early_stop():
-            LOGGER.warning(f"Reached early stop at epoch {epoch_num}")
+            LOGGER.warning(f"Reached early stop at epoch {epoch_num+1}")
             break
         
         # check stop file
         if check_stop_file():
-            LOGGER.warning("Stop file '{}' found. Stopped at epoch {}".format(os.path.basename(STOP_FILE), epoch_num))
+            LOGGER.warning("Stop file '{}' found. Stopped at epoch {}".format(os.path.basename(STOP_FILE), epoch_num+1))
             delete_stop_file()
             break
 
@@ -550,10 +584,10 @@ def main():
         raise ValueError(f"Training aborted, no data with seizure")
     
     # create loss to use
-    neg_weight = 1.0
-    pos_weight = NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA
-    weight = torch.Tensor([neg_weight/(pos_weight+neg_weight), pos_weight/(pos_weight+neg_weight)]).to(device=DEVICE) if USE_WEIGHT else None
-    # weight = torch.Tensor([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA]).to(device=DEVICE) if USE_WEIGHT else None
+    # neg_weight = 1.0
+    # pos_weight = NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA
+    # weight = torch.Tensor([neg_weight/(pos_weight+neg_weight), pos_weight/(pos_weight+neg_weight)]).to(device=DEVICE) if USE_WEIGHT else None
+    weight = torch.Tensor([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA]).to(device=DEVICE) if USE_WEIGHT else None
     alpha = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else NUM_NOT_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
     match loss_type:
         case LossType.CROSS_ENTROPY:
@@ -571,7 +605,7 @@ def main():
     if do_train:
         LOGGER.info(f'Start training : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
         optimizer= torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-        train(train_loader, val_loader, test_loader, model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=num_epochs, verbose=verbose, show_epoch_progress=True)
+        train(train_loader, val_loader, test_loader, model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=num_epochs, verbose=verbose, show_epoch_progress=False)
     else:
         eval(test_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
 
