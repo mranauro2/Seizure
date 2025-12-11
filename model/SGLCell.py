@@ -69,7 +69,7 @@ class SGLC_Cell(nn.Module):
         if not(use_GRU) and ((hidden_dim_GGNN is not None) and (hidden_dim_GGNN != 0)):
             warnings.warn("hidden_dim_GGNN is not used because use_GRU is False")
 
-        keys_graph_learner = ["act", "v2", "concat", "beta"]
+        keys_graph_learner = ["use_sigmoid", "act", "v2", "concat", "beta"]
         kwargs_graph_learner = {key:value for key,value in kwargs.items() if key in keys_graph_learner}
         self.graph_learner = GraphLearner(
             input_size  = input_dim,

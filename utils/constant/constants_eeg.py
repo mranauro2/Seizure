@@ -101,6 +101,10 @@ ACT= 'relu'
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Non-linear activation function to use in the :data:`model.GraphLearner.GraphLearner` module"""
 
+USE_SIGMOID= False
+"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+Use the sigmoid as activation function after the computation of the attention in the :data:`model.GraphLearner.GraphLearner` module"""
+
 USE_GATv2= False
 """Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""

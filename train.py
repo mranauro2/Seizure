@@ -204,6 +204,7 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
         ("NUM_LAYERS", NUM_LAYERS),
         ("DROPOUT", DROPOUT),
         ("EPSILON", EPSILON),
+        ("USE_SIGMOID", USE_SIGMOID),
         ("USE_GATv2", USE_GATv2),
         ("CONCAT", CONCAT),
         ("BETA", BETA)
@@ -560,6 +561,7 @@ def main():
         num_steps       = NUM_STEPS,
         use_GRU_in_GGNN = USE_GRU_IN_GGNN,
         
+        use_sigmoid     = USE_SIGMOID,
         act             = ACT,
         v2              = USE_GATv2,
         concat          = CONCAT,

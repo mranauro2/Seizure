@@ -31,6 +31,7 @@ class GraphLearner(nn.Module):
             epsilon:float=None,
             device:str=None,
             *,
+            use_sigmoid:bool=False,
             act:str|Callable='relu',
             v2:bool=False,
             concat:bool=False,
@@ -50,6 +51,7 @@ class GraphLearner(nn.Module):
             epsilon (float):                    Threshold for deleting weak connections in the learned graph. If None, no deleting is applied
             device (str):                       Device to place the model on
             
+            use_sigmoid (bool):                 Use the sigmoid as activation function after the computation of the attention
             act (str|Callable):                 The non-linear activation function to use
             v2 (bool):                          Use GATV2 instead of GAT for the multi-head attention
             concat (bool):                      If True the multi-head attentions are concatenated, otherwise are averaged
@@ -57,7 +59,8 @@ class GraphLearner(nn.Module):
         """
         super(GraphLearner, self).__init__()
         self.epsilon = epsilon
-        self.attention_type= attention
+        self.attention_type = attention
+        self.use_sigmoid = use_sigmoid
         
         # Check errors
         if (num_layers < 1):
@@ -246,6 +249,9 @@ class GraphLearner(nn.Module):
         if self.epsilon is not None:
             attention = self._build_epsilon_neighbourhood(attention)
 
+        if self.use_sigmoid:
+            attention = torch.sigmoid(attention)
+        
         return attention
 
     def _forward_gat(self, context:Tensor, adj:Tensor) -> Tensor:
@@ -266,6 +272,9 @@ class GraphLearner(nn.Module):
         # Modify the attention matrix by setting values below epsilon to a marker
         if self.epsilon is not None:
             attention = self._build_epsilon_neighbourhood(attention)
+        
+        if self.use_sigmoid:
+            attention = torch.sigmoid(attention)
         
         return attention
     
@@ -294,6 +303,9 @@ class GraphLearner(nn.Module):
         if self.epsilon is not None:
             attention = self._build_epsilon_neighbourhood(attention)
         
+        if self.use_sigmoid:
+            attention = torch.sigmoid(attention)
+        
         return attention
     
     def _create_batch(self, context:Tensor, adj:Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -318,14 +330,10 @@ class GraphLearner(nn.Module):
         x_list = []
         edge_index_list = []
         edge_attr_list = []
-        # Create batched graph
-        x_list = []
-        edge_index_list = []
-        edge_attr_list = []
         
         for batch_idx in range(batch_size):
             edge_index, edge_attr = dense_to_sparse(adj[batch_idx])
-            edge_index_offset = edge_index + batch_idx * num_nodes          # Offset edge indices for this graph in the batch
+            edge_index_offset = edge_index + batch_idx * num_nodes              # Offset edge indices for this graph in the batch
             
             x_list.append(context[batch_idx])
             edge_index_list.append(edge_index_offset)
