@@ -51,6 +51,9 @@ NUM_WORKERS= 16
 RANDOM_STATE= 13
 """Controls the shuffling applied to the data before applying the split. Pass an int for reproducible output across multiple function calls"""
 
+RANDOM_SEED= None
+"""Seed to controls the weights initializations. If None, don't use any seed"""
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # LOSSES INFO
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #

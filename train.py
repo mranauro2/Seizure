@@ -224,7 +224,7 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
         ("LEARNING_RATE", LEARNING_RATE),
         ("DAMP_SMOOTH", DAMP_SMOOTH),
         ("DAMP_DEGREE", DAMP_DEGREE),
-        ("DAMP_SPARSITY", DAMP_DEGREE)
+        ("DAMP_SPARSITY", DAMP_SPARSITY)
     ]
     loss_str = "Losses info:\n{}".format(dict_to_str(loss_tuple))
     
@@ -485,7 +485,7 @@ def main():
     remaining_data, test_dict = split_patient_data_specific(dataset.targets_dict(), TEST_PATIENT_IDS)
     train_dict, val_dict = split_patient_data(remaining_data, split_ratio=PERCENTAGE_TRAINING_SPLIT)
     
-    trian_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
+    train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
     val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
     test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict)
     
@@ -500,14 +500,15 @@ def main():
         if os.path.exists(scaler_path):
             scaler= scaler.load(scaler_path, device=DEVICE)
         else:
-            scaler.fit(trian_set, single_value=single_scaler, func_operation=func_operation, use_tqdm=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+            scaler.fit(train_set, single_value=single_scaler, func_operation=func_operation, use_tqdm=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
             scaler.save(scaler_path)
         dataset.scaler= scaler
     
     # generate dataloaders
     train_sampler = None
-    if (MIN_SAMPLER_PER_BATCH == 0):
-        train_sampler= SeizureSampler(dataset.targets_list(), trian_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+    if (MIN_SAMPLER_PER_BATCH != 0):
+        train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+        LOGGER.warning("train_sampler is OK")
 
     train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
     test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
@@ -567,6 +568,7 @@ def main():
         concat          = CONCAT,
         beta            = BETA,
         
+        seed            = RANDOM_SEED,
         device          = DEVICE
     )
     

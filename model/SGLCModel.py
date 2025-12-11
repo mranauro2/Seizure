@@ -34,6 +34,7 @@ class SGLC_Encoder(nn.Module):
             num_steps:int=5,
             use_GRU_in_GGNN:bool=True,
             
+            seed:int=None,
             device:str=None,
             **kwargs
         ):
@@ -59,6 +60,7 @@ class SGLC_Encoder(nn.Module):
             num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
             use_GRU_in_GGNN (bool):                 Use the GRU module instead of the standard propagator in the Gated Graph Neural Networks module
             
+            seed (int):                             Sets the seed for the weights initializations. If None, don't use any seed
             device (str):                           Device to place the model on
             **kwargs:                               Additional arguments of `SGLC_Cell`
         """
@@ -85,6 +87,7 @@ class SGLC_Encoder(nn.Module):
                     num_steps=num_steps,
                     use_GRU_in_GGNN=use_GRU_in_GGNN,
                     
+                    seed=seed,
                     device=device,
                     **kwargs
                 )
@@ -191,6 +194,7 @@ class SGLC_Classifier(nn.Module):
             num_steps:int=5,
             use_GRU_in_GGNN:bool=False,
             
+            seed:int=None,
             device:str=None,
             **kwargs
         ):
@@ -218,6 +222,7 @@ class SGLC_Classifier(nn.Module):
             num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
             use_GRU_in_GGNN (bool):                 Use the GRU module instead of the standard propagator in the Gated Graph Neural Networks module
             
+            seed (int):                             Sets the seed for the weights initializations. If None, don't use any seed
             device (str):                           Device to place the model on
             **kwargs:                               Additional arguments of `SGLC_Encoder`
         """
@@ -249,6 +254,7 @@ class SGLC_Classifier(nn.Module):
             num_steps=num_steps,
             use_GRU_in_GGNN=use_GRU_in_GGNN,
             
+            seed=seed,
             device=device,
             **kwargs
         )
@@ -258,6 +264,12 @@ class SGLC_Classifier(nn.Module):
             nn.LeakyReLU(negative_slope=0.2),
             nn.Linear(num_classes*4, num_classes, device=device),
         )
+        
+        if (seed is not None):
+            torch.manual_seed(seed)
+        for param in self.fc.parameters():
+            if param.dim() > 1:
+                nn.init.xavier_uniform_(param)
     
     def forward(self, input_seq:Tensor, supports:Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """

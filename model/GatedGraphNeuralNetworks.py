@@ -67,7 +67,7 @@ class GGNNLayer(nn.Module):
     """
     Gated Graph Neural Networks (GGNN) Layer for learning the feature/node matrix
     """
-    def __init__(self, input_dim:int, num_nodes:int, output_dim:int, num_steps:int, use_GRU:bool=True, device:str=None):
+    def __init__(self, input_dim:int, num_nodes:int, output_dim:int, num_steps:int, use_GRU:bool=True, seed:int=None, device:str=None):
         """
         Use iterative propagation with the GRU mechanism to learn a new representation of the feature/node matrix.
         Args:
@@ -76,6 +76,7 @@ class GGNNLayer(nn.Module):
             output_dim (int):       Dimension chosen for the output of the new feature/node matrix
             num_steps (int):        Number of propagation iterations
             use_GRU (bool):         Use the GRU module instead of the standard propagator
+            seed (int):             Sets the seed for the weights initializations. If None, don't use any seed
             device (str):           Device to place the model on
         """
         super(GGNNLayer, self).__init__()
@@ -95,6 +96,15 @@ class GGNNLayer(nn.Module):
             self.propagator = Propogator(input_dim, device=device)
 
         self.fc = nn.Linear(input_dim, output_dim, device=device)
+        
+        if (seed is not None):
+            torch.manual_seed(seed)
+        for param in self.propagator.parameters():
+            if param.dim() > 1:
+                nn.init.xavier_uniform_(param)
+        for param in self.fc.parameters():
+            if param.dim() > 1:
+                nn.init.xavier_uniform_(param)
     
     def forward(self, inputs:Tensor, supports:Tensor) -> Tensor:
         """

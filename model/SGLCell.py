@@ -31,6 +31,7 @@ class SGLC_Cell(nn.Module):
             num_steps:int=5,
             use_GRU_in_GGNN:bool=False,
             
+            seed:int=None,
             device:str=None,
             **kwargs
         ):
@@ -55,6 +56,7 @@ class SGLC_Cell(nn.Module):
             num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
             use_GRU_in_GGNN (bool):                 Use the GRU module instead of the standard propagator in the Gated Graph Neural Networks module
             
+            seed (int):                             Sets the seed for the weights initializations. If None, don't use any seed
             device (str):                           Device to place the model on
             **kwargs:                               Additional arguments of `GraphLearner`
         """
@@ -81,6 +83,7 @@ class SGLC_Cell(nn.Module):
             dropout     = dropout,
             epsilon     = epsilon,
             device      = device,
+            seed        = seed,
             **kwargs_graph_learner
         )
         
@@ -91,6 +94,7 @@ class SGLC_Cell(nn.Module):
             output_dim  = input_dim,
             num_steps   = num_steps,
             use_GRU     = use_GRU_in_GGNN,
+            seed        = seed,
             device      = device
         )
         
@@ -100,6 +104,11 @@ class SGLC_Cell(nn.Module):
                 hidden_size = num_nodes*hidden_dim_GGNN,
                 device      = device
             )
+            if (seed is not None):
+                torch.manual_seed(seed)
+            for param in self.gru.parameters():
+                if param.dim() > 1:
+                    nn.init.xavier_uniform_(param)
 
     def forward(self, inputs:Tensor, supports:Tensor, state:Tensor=None) -> tuple[Tensor, Tensor]|tuple[Tensor, Tensor, Tensor]:
         """

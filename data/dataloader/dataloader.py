@@ -72,7 +72,7 @@ class SeizureDataset(Dataset):
             case SeizureDatasetMethod.LAPLACIAN:
                 self._compute_adj = self._compute_laplacian
             case _:
-                raise NotImplementedError("Method {} is not implemented yet".format(self.method))
+                raise NotImplementedError("Method '{}' is not implemented yet".format(self.method))
         
         self.file_info= list()
         for file in files_record:

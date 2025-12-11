@@ -31,6 +31,7 @@ class GraphLearner(nn.Module):
             epsilon:float=None,
             device:str=None,
             *,
+            seed:int=None,
             use_sigmoid:bool=False,
             act:str|Callable='relu',
             v2:bool=False,
@@ -51,6 +52,7 @@ class GraphLearner(nn.Module):
             epsilon (float):                    Threshold for deleting weak connections in the learned graph. If None, no deleting is applied
             device (str):                       Device to place the model on
             
+            seed (int):                         Sets the seed for the weights initializations. If None, don't use any seed
             use_sigmoid (bool):                 Use the sigmoid as activation function after the computation of the attention
             act (str|Callable):                 The non-linear activation function to use
             v2 (bool):                          Use GATV2 instead of GAT for the multi-head attention
@@ -96,6 +98,8 @@ class GraphLearner(nn.Module):
                 raise NotImplementedError("Attention {} is not implemented yet".format(self.attention_type))
         
         # initialize
+        if (seed is not None):
+            torch.manual_seed(seed)
         for param in self.att.parameters():
             if param.dim() > 1:
                 nn.init.xavier_uniform_(param)
