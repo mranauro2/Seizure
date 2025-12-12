@@ -63,12 +63,12 @@ class TqdmMinutes(tqdm):
     """
     Custom tqdm:
       - switches s/it → min/it when iteration time > 60 sec
-      - adds ETA clock time in HH:MM
+      - adds ETA clock time in HH:MM:SS
     """
     def __init__(self, *args, bar_format=None, **kwargs):
         # if caller does not supply bar_format → use default
         if bar_format is None:
-            bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] ETA:{eta_clock}"
+            bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] ETA: {eta_clock} LAST_UPDATE: {last_update}"
         super().__init__(*args, bar_format=bar_format, **kwargs)
     
     @property
@@ -88,8 +88,10 @@ class TqdmMinutes(tqdm):
         if remaining is not None:
             finish = datetime.now() + timedelta(seconds=remaining)
             d["eta_clock"] = finish.strftime("%H:%M:%S")
+            d["last_update"] = datetime.now().strftime("%H:%M:%S")
         else:
-            d["eta_clock"] = "--:--"
+            d["eta_clock"] = "--:--:--"
+            d["last_update"] = "--:--:--"
         
         return d
 
@@ -510,9 +512,9 @@ def main():
         train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
         LOGGER.warning("train_sampler is OK")
 
-    train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
-    test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
-    val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=True)
+    train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
+    test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
+    val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
     
     # print on screen some informations
     def pos_neg_samples(dictionary:dict[str, list[int]]):
