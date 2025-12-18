@@ -84,14 +84,13 @@ class TqdmMinutes(tqdm):
                 d["rate_fmt"] = f"{min_per_iter:0.2f}min/{d['unit']}"
 
         # ---- ETA as a clock time ----
+        d["last_update"] = datetime.now().strftime("%H:%M:%S")
         remaining = (self.total - self.n) / rate if rate and self.total else None
         if remaining is not None:
             finish = datetime.now() + timedelta(seconds=remaining)
             d["eta_clock"] = finish.strftime("%H:%M:%S")
-            d["last_update"] = datetime.now().strftime("%H:%M:%S")
         else:
             d["eta_clock"] = "--:--:--"
-            d["last_update"] = "--:--:--"
         
         return d
 

@@ -22,6 +22,7 @@ class SGLC_Encoder(nn.Module):
             
             graph_skip_conn:float=0.3,
             use_GRU:bool=False,
+            hidden_per_step:bool=True,
             
             hidden_dim_GL:int=100,
             attention_type:GraphLearnerAttention=None,
@@ -48,6 +49,7 @@ class SGLC_Encoder(nn.Module):
             
             graph_skip_conn (float):                Skip connection weight for adjacency matrix updates
             use_GRU (bool):                         Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
+            hidden_per_step (bool):                 Use a new hidden state for each time step (only if `use_GRU` is True)
             
             hidden_dim_GL (int):                    Hidden dimension for the Graph Learner module
             attention_type (GraphLearnerAttention): Type of attention used for the Graph Learner module
@@ -66,6 +68,9 @@ class SGLC_Encoder(nn.Module):
         """
         super(SGLC_Encoder, self).__init__()
 
+        self.use_GRU = use_GRU
+        self.hidden_per_step = hidden_per_step
+        
         encoding_cells = list()
         for _ in range(num_cells):
             encoding_cells.append(
@@ -93,7 +98,6 @@ class SGLC_Encoder(nn.Module):
                 )
             )
         self.encoding_cells = nn.ModuleList(encoding_cells)
-        self.use_GRU= use_GRU
     
     def forward(self, inputs: torch.Tensor, supports: torch.Tensor, initial_hidden_state: torch.Tensor = None):
         """
@@ -102,7 +106,7 @@ class SGLC_Encoder(nn.Module):
         Args:
             inputs (Tensor):                Matrix of node with size (sequential_length, batch_size, num_nodes, input_dim)
             supports (Tensor):              Adjacency matrix with size (batch_size, num_nodes, num_nodes)
-            initial_hidden_state (Tensor):  To pass only if `use_GRU` is True. Hidden state matrix with size (num_cells, batch_size, num_nodes*hidden_dim)
+            initial_hidden_state (Tensor):  To pass only if `use_GRU` is True. Hidden state matrix with size (num_cells, batch_size, num_nodes\*hidden_dim) if `hidden_per_step` is True, otherwise size (batch_size, num_nodes\*hidden_dim)
 
         Returns:
             tuple(Tensor, Tensor):  A tuple containing:
@@ -127,18 +131,27 @@ class SGLC_Encoder(nn.Module):
             input_t = inputs[t]
             updated_states = []
 
-            # Pass through each encoding cell (using the hidden state)
+            # Pass through each encoding cell (case hidden state per cell)
             if self.use_GRU:
-                for cell_idx,cell in enumerate(self.encoding_cells):
-                    hidden_state = current_hidden[cell_idx]
-                    input_t, current_supports, hidden_state = cell.forward(input_t, current_supports, hidden_state)
-                    updated_states.append(hidden_state)
+                if self.hidden_per_step:
+                    for cell_idx,cell in enumerate(self.encoding_cells):
+                        hidden_state = current_hidden[cell_idx]
+                        input_t, current_supports, hidden_state = cell.forward(input_t, current_supports, hidden_state)
+                        updated_states.append(hidden_state)
+                    
+                    # Update store output
+                    current_hidden = torch.stack(updated_states, dim=0)
+                    processed_inputs.append(input_t)
                 
-                # Update store output
-                current_hidden = torch.stack(updated_states, dim=0)
-                processed_inputs.append(input_t)
+                # Pass through each encoding cell (case single hidden state)
+                else:
+                    for cell in self.encoding_cells:
+                        input_t, current_supports, current_hidden = cell.forward(input_t, current_supports, current_hidden)
+                
+                    # Update store output
+                    processed_inputs.append(input_t)
             
-            # Pass through each encoding cell
+            # Pass through each encoding cell (case no hidden state)
             else:
                 for cell in self.encoding_cells:                
                     input_t, current_supports = cell.forward(input_t, current_supports)
@@ -157,7 +170,7 @@ class SGLC_Encoder(nn.Module):
 
     def hidden_state_empty(self, batch_size:int) -> Tensor:
         """
-        Create an initialized hidden state tensor for all SGLCell layers
+        Create an uninitialized hidden state tensor for all SGLCell layers
             :param batch_size (int):   The size of the batch dimension
             :return Tensor:            Hidden state tensor, calculated as stack of the hidden state for each SGLCell
         """
@@ -177,10 +190,11 @@ class SGLC_Classifier(nn.Module):
             num_classes:int=1,
             num_cells:int=1,
             input_dim:int=100,
-            num_nodes:int=10, 
+            num_nodes:int=10,
             
             graph_skip_conn:float=0.3,
             use_GRU:bool=False,
+            hidden_per_step:bool=True,
             
             hidden_dim_GL:int=100,
             attention_type:GraphLearnerAttention=GraphLearnerAttention.GRAPH_ATTENTION_LAYER,
@@ -188,8 +202,7 @@ class SGLC_Classifier(nn.Module):
             num_heads:int=16,
             dropout:float=0,
             epsilon:float=None,
-            
-                        
+
             hidden_dim_GGNN:int=None,
             num_steps:int=5,
             use_GRU_in_GGNN:bool=False,
@@ -210,6 +223,7 @@ class SGLC_Classifier(nn.Module):
             
             graph_skip_conn (float):                Skip connection weight for adjacency updates
             use_GRU (bool):                         Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
+            hidden_per_step (bool):                 Use a new hidden state for each time step (only if `use_GRU` is True)
             
             hidden_dim_GL (int):                    Hidden dimension for Graph Learner module
             attention_type (GraphLearnerAttention): Type of attention used for the Graph Learner module
@@ -234,6 +248,7 @@ class SGLC_Classifier(nn.Module):
         self.params.pop('__class__')
         
         self.use_GRU= use_GRU
+        self.hidden_per_step= hidden_per_step
         self.device= device
         self.encoder = SGLC_Encoder(
             num_cells=num_cells,
@@ -242,6 +257,7 @@ class SGLC_Classifier(nn.Module):
             
             graph_skip_conn=graph_skip_conn,
             use_GRU=use_GRU,
+            hidden_per_step=hidden_per_step,
 
             hidden_dim_GL=hidden_dim_GL,
             attention_type=attention_type,
@@ -289,7 +305,10 @@ class SGLC_Classifier(nn.Module):
         input_seq = torch.transpose(input_seq, dim0=0, dim1=1)
         
         if self.use_GRU:
-            init_hidden_state = torch.zeros_like( self.encoder.hidden_state_empty(batch_size=input_seq.size(1)) )            
+            if self.hidden_per_step:
+                init_hidden_state = torch.zeros_like( self.encoder.hidden_state_empty(batch_size=input_seq.size(1)) )
+            else:
+                init_hidden_state = torch.zeros_like( self.encoder.hidden_state_empty(batch_size=input_seq.size(1))[0] )
             init_hidden_state = init_hidden_state.to(device=self.device)
             input_seq, supports, _ = self.encoder.forward(input_seq, supports, init_hidden_state)
         else:

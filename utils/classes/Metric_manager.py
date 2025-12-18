@@ -115,6 +115,7 @@ class Metrics():
         
         plt.xlabel("Epochs")
         plt.ylabel("Value")
+        plt.ticklabel_format(style='scientific', axis='y', useOffset=False)
         
         marker= "." if marker else None
         
