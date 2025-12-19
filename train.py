@@ -5,13 +5,14 @@
 import torch
 from torch.utils.data import DataLoader, Subset
 
-from utils.classes.Checkpoint_manager import CheckPoint
-from utils.constant.constants_eeg import *
 from utils.constant.constants_main import *
-from utils.classes.Metrics_classes import *
+from utils.constant.constants_eeg import *
+from utils.classes.Checkpoint_manager import CheckPoint
 from utils.classes.Metric_manager import Metrics
+from utils.classes.Metrics_classes import *
 from data.scaler.scaler import *
 from data.utils import *
+from train_utils import *
 
 from data.dataloader.dataloader import SeizureDataset, SeizureSampler
 
@@ -19,17 +20,15 @@ from model.loss.loss_regularization import *
 from model.SGLCModel import SGLC_Classifier
 from model.loss.loss_classes import *
 
-from torch.nn.functional import one_hot
 from train_args import parse_arguments
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from tqdm.auto import tqdm
 import numpy as np
 import logging
 import random
 import string
 import os
-import re
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -54,184 +53,6 @@ NUM_NOT_SEIZURE_DATA= 0
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# UTILS
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-
-class TqdmMinutes(tqdm):
-    """
-    Custom tqdm:
-      - switches s/it → min/it when iteration time > 60 sec
-      - adds ETA clock time in HH:MM:SS
-    """
-    def __init__(self, *args, bar_format=None, **kwargs):
-        # if caller does not supply bar_format → use default
-        if bar_format is None:
-            bar_format = "{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}] ETA: {eta_clock} LAST_UPDATE: {last_update}"
-        super().__init__(*args, bar_format=bar_format, **kwargs)
-    
-    @property
-    def format_dict(self):
-        d = super().format_dict
-
-        # ---- determine if switching to minutes ----
-        rate = d["rate"]  # iterations per second
-        if rate and rate > 0:
-            sec_per_iter = 1.0 / rate
-            if sec_per_iter > 60:
-                min_per_iter = sec_per_iter / 60
-                d["rate_fmt"] = f"{min_per_iter:0.2f}min/{d['unit']}"
-
-        # ---- ETA as a clock time ----
-        d["last_update"] = datetime.now().strftime("%H:%M:%S")
-        remaining = (self.total - self.n) / rate if rate and self.total else None
-        if remaining is not None:
-            finish = datetime.now() + timedelta(seconds=remaining)
-            d["eta_clock"] = finish.strftime("%H:%M:%S")
-        else:
-            d["eta_clock"] = "--:--:--"
-        
-        return d
-
-def get_model(dir:str, specific_num:int=None) -> tuple[str, int]:
-    """
-    Search for model files with numeric identifiers in a directory tree.\\
-    Recursively searches the specified directory and all subdirectories for files matching the pattern: `<prefix>_<number>.<extension>`\\
-    The function extracts the numeric identifier from each matching filename and either:
-    - Returns the file with the highest number (default behavior)
-    - Returns the file with a specific number if requested
-    
-    Args:
-        dir (str):              Root directory path to search. All subdirectories will be recursively traversed.
-        specific_num (int):     If provided, returns the first file found with this exact number instead of searching for the maximum
-    
-    Returns:
-        tuple(str, int):
-            - filename (str):   Full filepath (including directory path) of the matching model file. If no matching files exist returnsa an empty string
-            - epoch (int):      Number found for the full filepath
-    """
-    pattern= re.compile(r'_(\d+)\.(\D+)$')
-    
-    curr_epoch= 0
-    output_filename= ""
-    
-    for path, _, files in os.walk(dir):
-        for filename in files:
-            match = re.search(pattern, filename)
-            if match:
-                number = int(match.group(1))
-                if number > curr_epoch:
-                    curr_epoch= number
-                    output_filename= os.path.join(path, filename)
-                if (specific_num is not None) and (specific_num==number):
-                    return os.path.join(path, filename), curr_epoch
-    
-    return output_filename, curr_epoch
-
-def scaler_file_patient_ids(dictionary:dict[str, list[int]], separator:str="-") -> str:
-    """
-    Generate a string using the `separator` to divide the numbers of the patient ids.
-    
-    Args:
-        dictionary (dict[str, list[int]]):  Dictionary with patient_id as key and list of labels of integers as value
-        separator (str):                    Separator to use to divide the patient ids
-    
-    Examples:
-        >>> scaler_file_patient_ids(dictionary, separator="_")
-        >>> '02_04_05_06_07_09_10_11_12_14_15_17_18_20_21_22_23_24'
-        >>> scaler_file_patient_ids(dictionary, separator="-")
-        >>> '02-04-05-06-07-09-10-11-12-14-15-17-18-20-21-22-23-24'
-        >>> scaler_file_patient_ids(dictionary, separator=" - ")
-        >>> '02 - 04 - 05 - 06 - 07 - 09 - 10 - 11 - 12 - 14 - 15 - 17 - 18 - 20 - 21 - 22 - 23 - 24'
-    """
-    return separator.join(sorted([key.replace("chb", "") for key in dictionary.keys()], key=lambda x : int(x)))
-
-def check_stop_file():
-    """Check if the stop file exists"""
-    return os.path.exists(STOP_FILE)
-
-def delete_stop_file():
-    """Delete the stop file if exists"""
-    if check_stop_file():
-        os.remove(STOP_FILE)
-
-def func_operation(x:Tensor) -> Tensor:
-    """Operation to apply at the scaler"""
-    return x.transpose(dim0=0, dim1=2).reshape(x.size(2), -1)
-
-def dict_to_str(list_to_print:list[tuple[str,any]], print_none:bool=False, print_zero:bool=False):
-    """Generate a string given the input"""
-    string= ""
-    ljust_value= max([len(item) for item,_ in list_to_print])
-    for name,value in list_to_print:
-        if not(print_none) and (value is None):
-            continue
-        if not(print_zero) and (isinstance(value, int) or isinstance(value, float)) and (value==0.0):
-            continue
-        string += "\t{} : {}\n".format(name.ljust(ljust_value), value)
-    return string
-
-def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -> str:
-    """Extract static additionl info"""
-    # DATASET
-    dataset_tuple_no_preprocess = [
-        ("MAX_SEQ_LEN", MAX_SEQ_LEN),
-        ("TIME_STEP_SIZE", TIME_STEP_SIZE),
-        ("USE_FFT", USE_FFT)
-    ]
-    dataset_tuple = [
-        ("TOP_K", TOP_K),
-        *dataset_data
-    ]
-    if not(preprocessed_data):
-        dataset_tuple.extend(dataset_tuple_no_preprocess)
-    dataset_str = "Dataset info:\n{}".format(dict_to_str(dataset_tuple))
-    
-    # MODEL
-    model_tuple = [
-        ("NUM_CELLS", NUM_CELLS),
-        ("GRAPH_SKIP_CONN", GRAPH_SKIP_CONN),
-        ("USE_GRU", USE_GRU)
-    ]
-    model_str = "Model info:\n{}".format(dict_to_str(model_tuple))
-    
-    # GRAPH LEARNER
-    GL_tuple = [
-        ("HIDDEN_DIM_GL", HIDDEN_DIM_GL),
-        ("NUM_HEADS", NUM_HEADS),
-        ("ATTENTION_TYPE", ATTENTION_TYPE),
-        ("ACT", ACT),
-        ("NUM_LAYERS", NUM_LAYERS),
-        ("DROPOUT", DROPOUT),
-        ("EPSILON", EPSILON),
-        ("USE_SIGMOID", USE_SIGMOID),
-        ("USE_GATv2", USE_GATv2),
-        ("CONCAT", CONCAT),
-        ("BETA", BETA)
-    ]
-    GL_str = "GL info:\n{}".format(dict_to_str(GL_tuple))
-    
-    # GATED GRAPH NEURAL NETWORK
-    GGNN_tuple = [("HIDDEN_DIM_GGNN", HIDDEN_DIM_GGNN)] if USE_GRU else []
-    GGNN_tuple.extend([
-        ("NUM_STEPS", NUM_STEPS),
-        ("USE_GRU_IN_GGNN", USE_GRU_IN_GGNN)
-    ])
-    GGNN_str = "GGNN info:\n{}".format(dict_to_str(GGNN_tuple))
-    
-    # LOSSES
-    loss_tuple = [
-        ("LEARNING_RATE", LEARNING_RATE),
-        ("DAMP_SMOOTH", DAMP_SMOOTH),
-        ("DAMP_DEGREE", DAMP_DEGREE),
-        ("DAMP_SPARSITY", DAMP_SPARSITY)
-    ]
-    loss_str = "Losses info:\n{}".format(dict_to_str(loss_tuple))
-    
-    total_str = "\n".join([dataset_str, model_str, GL_str, GGNN_str, loss_str])
-        
-    return total_str
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # TRAINING & EVALUATION
@@ -341,29 +162,66 @@ def train_epoch(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss:L
     """For more info see the function :func:`train_or_eval`"""
     return train_or_eval(data_loader=data_loader, model=model, prediction_loss=prediction_loss, optimizer=optimizer, verbose=verbose, show_progress=show_progress)
 
-def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader, model:SGLC_Classifier, prediction_loss:Loss, optimizer:torch.optim.Optimizer, num_epochs:int, verbose:bool=True, show_epoch_progress:bool=False):
+def train(
+        train_loader:DataLoader,
+        val_loader:DataLoader,
+        test_loader:DataLoader,
+        
+        model:SGLC_Classifier,
+        prediction_loss:Loss,
+        optimizer:torch.optim.Optimizer,
+        
+        num_epochs:int,
+        
+        verbose:bool=True,
+        evaluation_verbose:bool=False,
+        show_progress:bool=True,
+        show_inner_progress:bool|str=False,
+        
+        *,
+        
+        folder_number:str=None
+    ) -> bool:
     """
-    Train the model and evaluate its performance. Use static parameters from :data:`utils.constants_main` and :data:`utils.constants_eeg`
+    Train the model and evaluate its performance. Use static parameters from :data:`utils.constant.constants_main` and :data:`utils.constant.constants_eeg`
     to implement some operations.\\
     Each time the model improves by :const:`PERCENTAGE_MARGIN`% both model and metrics will be saved. They will be saved also
     if for :const:`MAX_NUM_EPOCHS` the model has no saves and at the last iteration. The path where model will be saved 
     is defined by :const:`MODEL_PARTIAL_PATH`\\_ `epoch_number` with extention :const:`MODEL_EXTENTION` and the path where the metrics 
     will be saved will be `name_metric`\\_ `epoch_number` with extention :const:`METRICS_EXTENTION`.\\
-    The metric used to is the first returned by :func:`train_or_eval`
+    If the train is done using k-fold cross validation, the model path folder and the metrics path folder will have inside of them
+    each folder for each fold. Inside each folder there will be the epochs.\\
+    The metric used in the checkpoint is the first returned by :func:`train_or_eval`
 
     Args:
         train_loader (DataLoader):          Data on which train the model
         val_loader (DataLoader):            Data on which evaluate the model
-        test_loader (DataLoader):           Data on which test the model
+        test_loader (DataLoader):           Data on which test the model (it's None when :const:`K_FOLD` is not None)
+        
         model (SGLCModel_classification):   Model to train or to evaluate
         prediction_loss (Loss):             Prediction loss class to train the model
         optimizer (torch.optim.Optimizer):  Optimizer used for training
+        
         num_epochs (int):                   Number of epochs for trainig
-        verbose (bool):                     Useful for printing information during the execution of the evaluation method
-        show_progress (bool):               Show the inner progress bar. The progress bar is removed when terminated
+        
+        verbose (bool):                     Useful for printing informations of the training phase
+        evaluation_verbose (bool):          Useful for printing informations during the execution of the evaluation method
+        show_progress (bool):               Show the progress bar with the number of epochs. The progress bar is removed when terminated
+        show_inner_progress (bool|str):     Show the inner progress bar. Can show also only the first iteration. The progress bar is removed when terminated
+        
+        folder_number (str):                Parameter used when :const:`K_FOLD` is not None to found the correct folder
+    
+    Returns:
+        interrupt (bool):                   If the execution is interrupted by checkpoint or stop file
     """
+    # check variable
+    possibilities = [True, False, "first"]
+    if show_inner_progress not in possibilities:
+        raise ValueError("The value '{}' in show_inner_progress does not exist. Choose between: '{}'".format(show_inner_progress, "', '".join([str(p) for p in possibilities])))
+    
     # print the information about the stop file to interrupt the training
-    LOGGER.info("To stop the execution create the file '{}' in the current folder".format(os.path.basename(STOP_FILE)))
+    if verbose:
+        LOGGER.info("To stop the execution create the file '{}' in the current folder".format(os.path.basename(STOP_FILE)))
     delete_stop_file()
     
     # using a dataloader of one batch with one item to compute dynamically the number of metrics and the name of metrics
@@ -373,53 +231,80 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
     metrics_name= [name for name,_ in dummy_metrics]
     num_metrics= len( metrics_name )
     
-    # generate the metrics array
+    # generate the metrics array (the test is present only if test_loader is not None)
     array_train= np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
     array_val=   np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
-    array_test=  np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
+    if (test_loader is not None):
+        array_test=  np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
     
-    # fusion with old metrics if exist
+    # fusion with old metrics if exist (the folder position and metrics retrieved can be different)
     if START_EPOCH!=0:
-        epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
+        if TEST_PATIENT_IDS:
+            epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
+        if K_FOLD:
+            global MODEL_PARTIAL_PATH
+            MODEL_PARTIAL_PATH= os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_{folder_number}", MODEL_NAME)
+            epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{os.path.basename(METRICS_SAVE_FOLDER)}_{folder_number}", f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
+            
         for index,name in enumerate(metrics_name):
             position = os.path.join(epoch_folder, f"{name}_{START_EPOCH}.{METRICS_EXTENTION}")
-            array_train[0:START_EPOCH, index], array_val[0:START_EPOCH, index], array_test[0:START_EPOCH, index] = Metrics.load(position)
+            if (test_loader is not None):
+                array_train[0:START_EPOCH, index], array_val[0:START_EPOCH, index], array_test[0:START_EPOCH, index] = Metrics.load(position)
+            else:
+                array_train[0:START_EPOCH, index], array_val[0:START_EPOCH, index], _ = Metrics.load(position)
     
-    # real training
+    # checkpoint init
     higher_is_better= False
     early_stop_start= (START_USE_EARLY_STOP-START_EPOCH) if (START_USE_EARLY_STOP-START_EPOCH)>0 else 0
     checkpoint_observer= CheckPoint(best_k=BEST_K_MODELS, each_spacing=MAX_NUM_EPOCHS, total_epochs=num_epochs, higher_is_better=higher_is_better, early_stop_patience=EARLY_STOP_PATIENCE, early_stop_start=early_stop_start)
     checkpoint_observer.margin= PERCENTAGE_MARGIN
     
-    LOGGER.info(
-        "CheckPoint will save {} values of '{}':".format('higher' if higher_is_better else 'lower', dummy_metrics[0][0]) +
-        "\n" +
-        "\tbest K model     : {} with margin of {:.2f}%".format(BEST_K_MODELS, 100*PERCENTAGE_MARGIN) +
-        "\n" +
-        "\teach epochs      : {}".format(MAX_NUM_EPOCHS) +
-        "\n"+
-        "\tearly stop       : {}".format(EARLY_STOP_PATIENCE) +
-        "\n"+
-        "\tearly_stop_start : {}".format(early_stop_start)
-    )
+    if verbose:
+        LOGGER.info(
+            "CheckPoint will save {} values of '{}':".format('higher' if higher_is_better else 'lower', dummy_metrics[0][0]) +
+            "\n" +
+            "\tbest K model     : {} with margin of {:.2f}%".format(BEST_K_MODELS, 100*PERCENTAGE_MARGIN) +
+            "\n" +
+            "\teach epochs      : {}".format(MAX_NUM_EPOCHS) +
+            "\n"+
+            "\tearly stop       : {}".format(EARLY_STOP_PATIENCE) +
+            "\n"+
+            "\tearly_stop_start : {}".format(early_stop_start)
+        )
     
-    for epoch_num in TqdmMinutes(range(num_epochs), desc="Progress", unit="epoch"):
-        metrics_train= train_epoch(train_loader, model, prediction_loss, optimizer, verbose=False, show_progress=(epoch_num==0))
-        metrics_val=   eval(val_loader,  model, prediction_loss, verbose=verbose, show_progress=(epoch_num==0))
-        metrics_test=  eval(test_loader, model, prediction_loss, verbose=verbose, show_progress=(epoch_num==0))
+    # real training
+    interrupt = False
+    for epoch_num in (TqdmMinutesAndHours(range(num_epochs), desc="Progress", unit="epoch", leave=False) if show_progress else range(num_epochs)):
+        show_inner_progress = show_inner_progress if isinstance(show_inner_progress, bool) else (epoch_num==0)
+        
+        metrics_train= train_epoch(train_loader, model, prediction_loss, optimizer, verbose=False, show_progress=show_inner_progress)
+        metrics_val=   eval(val_loader,  model, prediction_loss, verbose=evaluation_verbose, show_progress=show_inner_progress)
+        if (test_loader is not None):
+            metrics_test=  eval(test_loader, model, prediction_loss, verbose=evaluation_verbose, show_progress=show_inner_progress)
 
         current_idx = START_EPOCH + epoch_num
         array_train[current_idx] = np.array([value for _,value in metrics_train])
         array_val[current_idx]   = np.array([value for _,value in metrics_val])
-        array_test[current_idx]  = np.array([value for _,value in metrics_test])
+        if (test_loader is not None):
+            array_test[current_idx]  = np.array([value for _,value in metrics_test])
         
         used_metric= metrics_val[0][1]
         
         # save the metrics at each iteration
         for index,name in enumerate(metrics_name):
-            position= os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{epoch_num+START_EPOCH+1}", f"{name}_{epoch_num+START_EPOCH+1}.{METRICS_EXTENTION}")
+            if TEST_PATIENT_IDS:
+                intermediate = ""
+            if K_FOLD:
+                intermediate = f"{os.path.basename(METRICS_SAVE_FOLDER)}_{folder_number}"
+            
+            position= os.path.join(METRICS_SAVE_FOLDER, intermediate, f"{EPOCH_FOLDER_NAME}_{epoch_num+START_EPOCH+1}", f"{name}_{epoch_num+START_EPOCH+1}.{METRICS_EXTENTION}")
             until_epoch = START_EPOCH+epoch_num+1
-            Metrics.save(position, train_metric=array_train[0:until_epoch, index], val_metric=array_val[0:until_epoch, index], test_metric=array_test[0:until_epoch, index])
+            Metrics.save(
+                file_path    = position,
+                train_metric = array_train[0:until_epoch, index],
+                val_metric   = array_val[0:until_epoch, index],
+                test_metric  = array_test[0:until_epoch, index] if (test_loader is not None) else None
+            )
         
         # conditions to save the model
         saved_files= []
@@ -436,54 +321,153 @@ def train(train_loader:DataLoader, val_loader:DataLoader, test_loader:DataLoader
         # check the early stop
         if checkpoint_observer.check_early_stop():
             LOGGER.warning(f"Reached early stop at epoch {epoch_num+1}")
+            interrupt = True
             break
         
         # check stop file
         if check_stop_file():
             LOGGER.warning("Stop file '{}' found. Stopped at epoch {}".format(os.path.basename(STOP_FILE), epoch_num+1))
             delete_stop_file()
+            interrupt = True
             break
+    
+    return interrupt
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # MAIN
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def main():
+def main_k_fold():
+    """Main to evaluate the performance with k-fold cross validation"""
+    
+    """
+    Stampare le informazioni
+    Caricare il dataset
+    Fare la divisione k_fold + mostrarla a schermo + (info aggiuntive come %?)
+    
+    per ogni N checkpoints:
+        per ogni fold:
+            Creare il modello
+            Verificare la presenza della cartella + caricare il modello
+            Caricare lo scaler + applicarlo al dataset
+            Avviare l'addestramento del fold corrente fino a CHECKPOINT EPOCHS
+    
+    In tutto questo bisogna:
+        modificare il valore di start_epoch
+        DONE    aggiornare il training per creare le cartelle adatte in caso di k_fold
+        aggiungere TQDM globale per vedere l'andamento complessivo
+        togliere chb16
+        DONE    verificare come far funzionare early stop and il file
+        poi correggere il checkpoint manager
+        DONE    aggiungere verbose e show progress in train
+        capire come poter usare thread o simili per lanciare più job insieme dallo stesso file
+    """
     # take input from command line and print some informations
     loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    string_additional_info= additional_info(
-        preprocessed_data=(preprocess_dir is not None),
-        dataset_data=[
-            ('method', method),
-            ('lambda_value', lambda_value),
-            ('scaler', scaler)
-        ]
-    )
-    string= "{}{}".format("\n\t", "\n\t".join([item for item in string_additional_info.split("\n")]))
-    LOGGER.info(string)
+    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, single_scaler, preprocess_dir, MIN_SAMPLER_PER_BATCH)
+    
+    # removing unwanted patients
+    remaining_data = dataset.targets_dict()
+    if (EXCEPT_DATA is not None):
+        remaining_data, _ = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)
+    
+    # splitting data
+    k_fold = k_fold_split_patient_data(remaining_data, val_remaining_patients=K_FOLD)
+    
+    # print on screen some informations    
+    names= ["train", "validation"]
+    ljust_value= len(max(names))
+    
+    for index,item in enumerate(k_fold):
+        for name,dictionary in zip(names,item):
+            string = "" 
+            samples_pos, samples_neg = pos_neg_samples(dictionary)
+            string+= "Folde number {}".format(index+1)
+            string+= "\n\tUsing patient(s) for {} : '{}'".format(name.ljust(ljust_value), ", ".join(dictionary.keys()))
+            string+= "\n\t\tTotal samples       : {:>{}}/{:,} positive - {:>{}}/{:,} negative".format(
+                samples_pos,
+                len(str(samples_pos+samples_neg)), samples_pos+samples_neg,
+                
+                samples_neg,
+                len(str(samples_pos+samples_neg)), samples_pos+samples_neg
+                )
+            string+= "\n\t\tPositive ratio      : {:.3f}%".format(100 * samples_pos / (samples_pos+samples_neg))
+            LOGGER.info(string)
     
     # global variables
     global DEVICE, START_EPOCH, NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA
     
-    # load dataset
-    LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
-    dataset= SeizureDataset(
-        input_dir= input_dir,
-        files_record= files_record,
+    # training at most MAX_NUM_EPOCHS iterative for each fold
+    print_info = True
+    total_training = ( num_epochs // MAX_NUM_EPOCHS ) + int( num_epochs % MAX_NUM_EPOCHS != 0 )    
+    for index in TqdmMinutesAndHours(range(1, total_training+1), desc="Iteration"):
+        current_epochs = MAX_NUM_EPOCHS if (index*MAX_NUM_EPOCHS <= num_epochs) else (num_epochs % MAX_NUM_EPOCHS)
         
-        time_step_size= TIME_STEP_SIZE,
-        max_seq_len= MAX_SEQ_LEN,
-        use_fft= USE_FFT,
-        
-        preprocess_data=preprocess_dir,
-        
-        method=method,
-        top_k= TOP_K,
-        lambda_value=lambda_value
-    )
+        for train_dict,val_dict in TqdmMinutesAndHours(k_fold, desc="K-Fold", leave=False):
+            train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
+            val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
+            
+            # generating new scaler
+            scaler = scaler_load_and_save(LOGGER, scaler, single_scaler, train_dict, train_set, DEVICE)
+            if (scaler is not None):
+                dataset.scaler= scaler
+            
+            # generate dataloaders
+            train_sampler = None
+            if (MIN_SAMPLER_PER_BATCH != 0):
+                train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+                LOGGER.info("train_sampler is created successful")
+
+            train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
+            val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
+            
+            # load model if exists or create a new model
+            LOGGER.info("Loading model...")
+            DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
+            LOGGER.info(f"Using {DEVICE} device...")
+            
+            model= generate_model(dataset, DEVICE)
+            
+            folder_number = scaler_file_patient_ids(val_dict, separator="_")
+            filename, num_epoch = get_model(os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_{folder_number}"), specific_num=save_num)
+            
+            START_EPOCH= num_epoch
+            if len(filename)==0 and (not do_train):
+                raise ValueError(f"Evaluation stopped, model not present in the '{MODEL_SAVE_FOLDER}' folder")
+            if len(filename)!=0:
+                model= model.load(filename, device=DEVICE)
+                LOGGER.info(f"Loaded '{os.path.basename(filename)}'...")
+                
+            loss = generate_loss(LOGGER, train_dict, do_train, loss_type, DEVICE)
+            
+            # start train or evaluation
+            if do_train:
+                LOGGER.info(f'Start training : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
+                optimizer= torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+                train(
+                        train_loader, val_loader, None,
+                        model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=current_epochs,
+                        verbose=print_info, evaluation_verbose=False,
+                        show_progress=True, show_inner_progress="first" if print_info else False,
+                        folder_number=folder_number
+                    )
+                print_info = False
+                LOGGER.info(f'Stop training  : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
+            else:
+                eval(val_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
     
-    # splitting data
-    remaining_data, test_dict = split_patient_data_specific(dataset.targets_dict(), TEST_PATIENT_IDS)
+def main_test_set():
+    """Main to evaluate the patients in the test"""
+    # take input from command line and print some informations
+    loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
+    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, single_scaler, preprocess_dir, MIN_SAMPLER_PER_BATCH)
+    
+    # splitting data (and removing unwanted patients)
+    remaining_data = dataset.targets_dict()
+    if (EXCEPT_DATA is not None):
+        remaining_data, _ = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)
+        
+    remaining_data, test_dict = split_patient_data_specific(remaining_data, TEST_PATIENT_IDS)
     train_dict, val_dict = split_patient_data(remaining_data, split_ratio=PERCENTAGE_TRAINING_SPLIT)
     
     train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
@@ -491,35 +475,21 @@ def main():
     test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict)
     
     # generating new scaler
+    scaler = scaler_load_and_save(LOGGER, scaler, single_scaler, train_dict, train_set, DEVICE)
     if (scaler is not None):
-        LOGGER.info(f"Loading scaler '{scaler.name}'...")
-        scaler_name= "{}{}_{}.{}".format(scaler.name, '_single' if single_scaler else "", scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
-        scaler_path= os.path.join(SCALER_SAVE_FOLDER, scaler_name)
-        scaler= ConcreteScaler.create_scaler(scaler, device=DEVICE)
-    
-    if (scaler is not None):
-        if os.path.exists(scaler_path):
-            scaler= scaler.load(scaler_path, device=DEVICE)
-        else:
-            scaler.fit(train_set, single_value=single_scaler, func_operation=func_operation, use_tqdm=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
-            scaler.save(scaler_path)
         dataset.scaler= scaler
     
     # generate dataloaders
     train_sampler = None
     if (MIN_SAMPLER_PER_BATCH != 0):
         train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
-        LOGGER.warning("train_sampler is OK")
+        LOGGER.info("train_sampler is created successful")
 
     train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
     test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
     val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
     
     # print on screen some informations
-    def pos_neg_samples(dictionary:dict[str, list[int]]):
-        l= [label for value_list in dictionary.values() for label in value_list]
-        return sum(l), len(l)-sum(l)
-    
     names= ["test", "train", "validation"]
     dictionaries= [test_dict, train_dict, val_dict]
     ljust_value= len(max(names))
@@ -533,45 +503,15 @@ def main():
         string+= "\n\tPositive ratio          : {:.3f}%".format(100 * samples_pos / (samples_pos+samples_neg))
         LOGGER.info(string)
     
+    # global variables
+    global DEVICE, START_EPOCH, NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA
+    
     # load model if exists or create a new model
     LOGGER.info("Loading model...")
     DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
     LOGGER.info(f"Using {DEVICE} device...")
-    
-    feature_matrix, _, _ = dataset[0]
-    num_nodes= feature_matrix.size(1)
-    input_dim= feature_matrix.size(2)
             
-    model= SGLC_Classifier(
-        num_classes     = NUM_CLASSES,
-        
-        num_cells       = NUM_CELLS,
-        input_dim       = input_dim,
-        num_nodes       = num_nodes,
-        
-        graph_skip_conn = GRAPH_SKIP_CONN,
-        use_GRU         = USE_GRU,
-        
-        hidden_dim_GL   = HIDDEN_DIM_GL,
-        attention_type  = ATTENTION_TYPE,
-        num_layers      = NUM_LAYERS,
-        num_heads       = NUM_HEADS,
-        dropout         = DROPOUT,
-        epsilon         = EPSILON,
-        
-        hidden_dim_GGNN = HIDDEN_DIM_GGNN,
-        num_steps       = NUM_STEPS,
-        use_GRU_in_GGNN = USE_GRU_IN_GGNN,
-        
-        use_sigmoid     = USE_SIGMOID,
-        act             = ACT,
-        v2              = USE_GATv2,
-        concat          = CONCAT,
-        beta            = BETA,
-        
-        seed            = RANDOM_SEED,
-        device          = DEVICE
-    )
+    model= generate_model(dataset, DEVICE)
     
     filename, num_epoch = get_model(MODEL_SAVE_FOLDER, specific_num=save_num)
     START_EPOCH= num_epoch
@@ -581,38 +521,33 @@ def main():
         model= model.load(filename, device=DEVICE)
         LOGGER.info(f"Loaded '{os.path.basename(filename)}'...")
     
-    # set the number of seizure and not seizure data
-    NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = pos_neg_samples(train_dict)
-    if do_train and (NUM_NOT_SEIZURE_DATA==0):
-        raise ValueError(f"Training aborted, no data without seizure")
-    if do_train and (NUM_SEIZURE_DATA==0):
-        raise ValueError(f"Training aborted, no data with seizure")
-    
-    # create loss to use
-    # neg_weight = 1.0
-    # pos_weight = NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA
-    # weight = torch.Tensor([neg_weight/(pos_weight+neg_weight), pos_weight/(pos_weight+neg_weight)]).to(device=DEVICE) if USE_WEIGHT else None
-    weight = torch.Tensor([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA]).to(device=DEVICE) if USE_WEIGHT else None
-    alpha = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else NUM_NOT_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
-    match loss_type:
-        case LossType.CROSS_ENTROPY:
-            loss = CrossEntropy(weight=weight)
-        case LossType.BCE_LOGITS:
-            loss = BCE_Logits(num_classes=NUM_CLASSES, pos_weight=weight)
-        case LossType.FOCAL_LOSS:
-            loss = FocalLoss(num_classes=NUM_CLASSES, alpha=alpha, gamma=FOCAL_LOSS_GAMMA)
-        case _:
-            raise NotImplementedError("Loss {} is not implemented yet".format(loss_type))
-    loss_params_str = dict_to_str(list(loss.parameters().items()))
-    LOGGER.info("Using loss type '{}'{}".format(loss_type.name, '' if loss_params_str=="" else f' with parameters :\n{loss_params_str}'))
+    loss = generate_loss(LOGGER, train_dict, do_train, loss_type, DEVICE)
     
     # start train or evaluation
     if do_train:
         LOGGER.info(f'Start training : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
         optimizer= torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-        train(train_loader, val_loader, test_loader, model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=num_epochs, verbose=verbose, show_epoch_progress=False)
+        train(  
+                train_loader, val_loader, test_loader,
+                model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=num_epochs,
+                verbose=True, evaluation_verbose=verbose,
+                show_progress=True, show_inner_progress="first"
+            )
+        LOGGER.info(f'Stop training  : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
     else:
         eval(test_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
 
 if __name__=='__main__':
-    main()
+    if K_FOLD and TEST_PATIENT_IDS:
+        raise ValueError("The variables K_FOLD, TEST_PATIENT_IDS are not None. Only one can be not None")
+    
+    if K_FOLD:
+        LOGGER.info("Execution with k-fold cross validation\n")
+        main_k_fold()
+        
+    elif TEST_PATIENT_IDS:
+        LOGGER.info("Execution with patients as test set\n")
+        main_test_set()
+        
+    else:
+        raise ValueError("Not implemented yet")

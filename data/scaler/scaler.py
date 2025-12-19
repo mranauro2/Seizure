@@ -89,7 +89,7 @@ class Scaler(ABC):
 class ConcreteScaler():
     """Abstract factory class to normalize the data"""
     @staticmethod
-    def create_scaler(scaler_type:ScalerType, device:str=None):
+    def create_scaler(scaler_type:ScalerType, device:str=None) -> Scaler:
         """
             :param scaler_type (ScalerType):    Type of scaler to generate
             :param device (str):                Device where do computations on ('cuda', 'cpu', etc.)

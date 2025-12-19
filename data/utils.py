@@ -1,3 +1,4 @@
+import warnings
 import itertools
 import numpy as np
 
@@ -220,17 +221,36 @@ def compute_plv_matrix(graph: np.ndarray) -> np.ndarray:
 # DATASET SPLIT UTILS
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def split_patient_data(patient_data:dict[str,list[int]], split_ratio:float, size_tolerance:float=1e-4, combinations_needed:int=10, max_combinations:int=100_000, tolerance_growth_factor:float=2, return_tolerance:bool=False, verbose:bool=False) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
+def split_patient_data(
+        patient_data: dict[str, list[int]],
+        split_ratio: float = 0.8,
+        
+        val_remaining_patients: int = None,
+        except_data: list[str] = None,
+        
+        size_tolerance: float = 1e-4,
+        combinations_needed: int = 10,
+        max_combinations: int = 100_000,
+        tolerance_growth_factor: float = 2,
+        
+        return_tolerance: bool = False,
+        verbose: bool = False
+    ) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
     """
-    Split patient data to maintain positive/negative ratio using optimized search.
+    Split patient data in train and validation to maintain positive/negative ratio using optimized search
     
     Args:
         patient_data (dict[str,list[int]]): Dictionary with patient_id as key and list of labels of integers as value
-        split_ratio (float):                Desired proportion of *total samples* that should appear in the first set
+        split_ratio (float):                Desired proportion of *total samples* that should appear in the first set. Must be between 0 and 1
+        
+        val_remaining_patients (int):       If specified, the validation set will contain exactly this many patients, overriding the `split_ratio` parameter
+        except_data (list[str]):            Key as patient_id which are not allowed to be in the validation set
+        
         size_tolerance (float):             Allowed deviation from the exact target size
         combinations_needed (int):          Combinations to found before checking for the best one
-        max_combinations (int):             Maximum number of combinations to check before stopping (if `combinations_found` combinations are not found before)
+        max_combinations (int):             Maximum number of combinations to check before stopping (if `combinations_needed` combinations are not found before)
         tolerance_growth_factor (float):    If no valid combination is found, expand size_tolerance by this factor and retry instead of raising an error
+        
         return_tolerance (bool):            If True, return (set1, set2, final_tolerance), otherwise return only the sets
         verbose (bool):                     Whether to print detailed progress information
     
@@ -241,18 +261,37 @@ def split_patient_data(patient_data:dict[str,list[int]], split_ratio:float, size
         ValueError: If no combinations are found with `size_tolerance`
     """
     # Input validation
-    if combinations_needed <= 0:
+    if (combinations_needed <= 0):
         raise ValueError("combinations_needed must be positive.")
-    if max_combinations <= 0:
+    if (max_combinations <= 0):
         raise ValueError("max_combinations must be positive.")
-    if not(0 <= size_tolerance <= 1):
-        raise ValueError("size_tolerance must between 0 and 1.")
-    if tolerance_growth_factor <= 0:
+    if not (0 < size_tolerance < 1):
+        raise ValueError("size_tolerance must be between 0 and 1.")
+    if not (0 < split_ratio < 1):
+        raise ValueError("split_ratio must be between 0 and 1.")
+    if (tolerance_growth_factor <= 0):
         raise ValueError("tolerance_growth_factor must be positive.")
+    
+    # Validate target_remaining_patients
+    total_patients = len(patient_data)
+    if (val_remaining_patients is not None):
+        if (val_remaining_patients >= total_patients):
+            msg = f"target_remaining_patients ({val_remaining_patients}) must be less than the total number of patients ({total_patients})."
+            raise ValueError(msg)
+        if val_remaining_patients <= 0:
+            raise ValueError("target_remaining_patients must be positive.")
+    
+    # Check if except_data items exist in patient_data
+    if (except_data is not None):
+        missing_patients = [pid for pid in except_data if pid not in patient_data.keys()]
+        msg = f"The following patient IDs in 'except_data' were not found in 'patient_data': {', '.join(missing_patients)}"
+        if missing_patients:
+            warnings.warn(msg)    
+        except_data = [pid for pid in except_data if pid in patient_data.keys()]
     
     # Precompute basic statistics
     subjects = []
-    for patient_id,labels in patient_data.items():
+    for patient_id, labels in patient_data.items():
         subjects.append({
             'id': patient_id,
             'total': len(labels),
@@ -266,12 +305,20 @@ def split_patient_data(patient_data:dict[str,list[int]], split_ratio:float, size
     target_sample_count = split_ratio * total_samples
     allowed_abs_deviation = size_tolerance * total_samples
     
+    use_patient_count_mode = (val_remaining_patients is not None)
+    
     if verbose:
         print(f"=== Split Search Start ===")
-        print(f"Total samples:   {total_samples}")
-        print(f"Total positives: {total_pos}")
-        print(f"Global ratio:    {global_ratio:.6f}")
-        print(f"Target samples:  {target_sample_count:.1f} ± {allowed_abs_deviation:.1f} [{100 * size_tolerance:.4f} %]")
+        print(f"Total patients:        {len(subjects)}")
+        print(f"Total samples:         {total_samples}")
+        print(f"Total positives:       {total_pos}")
+        print(f"Global ratio:          {global_ratio:.6f}")
+        if use_patient_count_mode:
+            print(f"Target remaining:      {val_remaining_patients} patients in validation set")
+        else:
+            print(f"Target samples:        {target_sample_count:.1f} ± {allowed_abs_deviation:.1f} [{100 * size_tolerance:.4f}%]")
+        if (except_data is not None):
+            print(f"Required in train:     {', '.join(except_data)}")
 
     # Sort by sample count (large subjects first --> better pruning)
     subjects_sorted = sorted(subjects, key=lambda x: x['total'], reverse=True)
@@ -291,6 +338,10 @@ def split_patient_data(patient_data:dict[str,list[int]], split_ratio:float, size
         if (0 <= down <= num_subjects) and (down not in search_order):
             search_order.append(down)
     
+    # Only search for exact size (override search_order)
+    if use_patient_count_mode:
+        search_order = [num_subjects - val_remaining_patients]
+    
     valid_candidates = []
     tested = 0
     
@@ -306,8 +357,11 @@ def split_patient_data(patient_data:dict[str,list[int]], split_ratio:float, size
             total_c = sum(s["total"] for s in combo)
             
             # sample count too far from target
-            if abs(total_c - target_sample_count) > allowed_abs_deviation:
-                continue  
+            if not(use_patient_count_mode) and abs(total_c - target_sample_count) > allowed_abs_deviation:
+                continue
+            # key not allowed in the second set --> must be in the first set
+            if (except_data is not None) and (not(all(expection in list(s['id'] for s in combo) for expection in except_data))):
+                    continue
             
             pos_c = sum(s["positives"] for s in combo)
             ratio = pos_c / total_c if total_c > 0 else 0
@@ -324,22 +378,28 @@ def split_patient_data(patient_data:dict[str,list[int]], split_ratio:float, size
     if verbose:
         print(f"Checked {tested:,} combinations")
         print(f"Valid candidates: {len(valid_candidates)}")
+        if valid_candidates:
+            for index,candidate in enumerate(valid_candidates[:3], 1):
+                aux = {pid: patient_data[pid] for pid in patient_data.keys() if pid not in set(candidate["ids"])}
+                print(f"\tCandidate {index} - validation patients: {', '.join(aux.keys())}")
         
-    # If no valid combination found expand tolerance and retry
+    # If no valid combination found, expand tolerance and retry
     if not valid_candidates:
-        if tolerance_growth_factor:
+        if tolerance_growth_factor > 1:
             new_tol = size_tolerance * tolerance_growth_factor
             if verbose:
                 print(f"No valid combination found. Expanding tolerance to {new_tol:.6f} and retrying...")
             return split_patient_data(
-                patient_data,
-                split_ratio,
-                size_tolerance=new_tol,
-                combinations_needed=combinations_needed,
-                max_combinations=max_combinations,
-                tolerance_growth_factor=tolerance_growth_factor,
-                return_tolerance=return_tolerance,
-                verbose=verbose
+                patient_data            = patient_data,
+                split_ratio             = split_ratio,
+                except_data             = except_data,
+                val_remaining_patients  = val_remaining_patients,
+                size_tolerance          = new_tol,
+                combinations_needed     = combinations_needed,
+                max_combinations        = max_combinations,
+                tolerance_growth_factor = tolerance_growth_factor,
+                return_tolerance        = return_tolerance,
+                verbose                 = verbose
             )
         raise ValueError("No valid combination found within tolerance.")
     
@@ -358,22 +418,83 @@ def split_patient_data(patient_data:dict[str,list[int]], split_ratio:float, size
         set_2_positive= sum([value for value_list in set2.values() for value in value_list])
         
         print(f"=== Split Search Results ===")
-        print("Set 1 positive ratio {:.5f} [{:.5f} expected] and length {:.2f} % [{:.2f} % expected]".format(
+        print("Train set positive ratio {:.5f} [{:.5f} expected] and length {:.2f} % [{} % expected]".format(
             set_1_positive/set_1_total,
             global_ratio,
             100 * set_1_total / (set_1_total+set_2_total), 
-            100 * split_ratio
+            "???" if use_patient_count_mode else f"{(100 * split_ratio):.2f}"
         ))
-        print("Set 2 positive ratio {:.5f} [{:.5f} expected] and length {:.2f} % [{:.2f} % expected]".format(
+        print("Valid set positive ratio {:.5f} [{:.5f} expected] and length {:.2f} % [{} % expected]".format(
             set_2_positive/set_2_total,
             global_ratio,
             100 * set_2_total / (set_1_total+set_2_total),
-            100 * (1-split_ratio)
+            "???" if use_patient_count_mode else f"{(100 * (1-split_ratio)):.2f}"
         ))
         
     if return_tolerance:
         return set1, set2, size_tolerance
     return set1, set2
+
+def k_fold_split_patient_data(
+        patient_data: dict[str, list[int]],
+        
+        val_remaining_patients: int,
+        except_data: list[str] = None,
+        
+        combinations_needed: int = 10,
+        max_combinations: int = 100_000,
+        
+        verbose: bool = False,
+        verbose_inner:bool=False
+    ) -> list[tuple[dict[str, list[int]], dict[str, list[int]]]]:
+    """
+    Use `split_patient_data` to generate K-fold train and validation maintaining positive/negative ratio using optimized search.
+    The last fold could have a inferior number of subjects
+    
+    Args:
+        patient_data (dict[str,list[int]]): Dictionary with patient_id as key and list of labels of integers as value
+        
+        val_remaining_patients (int):       The validation set will contain exactly this many patients
+        except_data (list[str]):            Key as patient_id which are not allowed to be in the second set
+        
+        combinations_needed (int):          Combinations to found before checking for the best one
+        max_combinations (int):             Maximum number of combinations to check before stopping (if `combinations_needed` combinations are not found before)
+        
+        verbose (bool):                     Whether to print detailed progress information
+        verbose_inner (bool):               Whether to print detailed progress information of the `split_patient_data` function
+    
+    Returns:
+        list(dict(str, list(int)), dict(str, list(int))):  Each dict has the same structure as `patient_data`
+    """
+    if (except_data is not None):
+        missing_patients = [pid for pid in except_data if pid not in patient_data.keys()]
+        msg = f"The following patient IDs in 'except_data' were not found in 'patient_data': {', '.join(missing_patients)}"
+        if missing_patients:
+            warnings.warn(msg)    
+        except_data = [pid for pid in except_data if pid in patient_data.keys()]
+    
+    total_subjects = len(patient_data) - len(except_data)
+    total_folds = ( total_subjects // val_remaining_patients ) + int( total_subjects % val_remaining_patients != 0 )
+    except_data = except_data if (except_data is not None) else []
+    k_fold = []
+    
+    for index in range(1, total_folds+1):
+        fold_size = val_remaining_patients if (index*val_remaining_patients <= total_subjects) else (total_subjects % val_remaining_patients)
+        
+        train_dict, val_dict = split_patient_data(
+                                    patient_data           = patient_data,
+                                    val_remaining_patients = fold_size,
+                                    except_data            = except_data,
+                                    combinations_needed    = combinations_needed,
+                                    max_combinations       = max_combinations,
+                                    verbose                = verbose_inner
+                                )
+        k_fold.append((train_dict, val_dict))
+        except_data.extend(val_dict.keys())
+        if verbose:
+            print("Fold {} has patitents : {}".format(index, ", ".join(val_dict.keys())))
+    
+    return k_fold
 
 def split_patient_data_specific(patient_data:dict[str,list[int]], patient_ids:list[str]) -> tuple[dict[str, list[int]], dict[str,list[int]]]:
     """

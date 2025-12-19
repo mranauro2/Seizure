@@ -68,16 +68,16 @@ def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, f
 
     possibilities= list_loss_type
     if (args.loss) not in possibilities:
-        parser.error("The value '{}' in argument --loss do not exists. Choose between: '{}'".format(args.loss, "', '".join(possibilities)))
+        parser.error("The value '{}' in argument --loss does not exist. Choose between: '{}'".format(args.loss, "', '".join(possibilities)))
 
     possibilities= list_seizuredataset_methods
     if (args.method) not in possibilities:
-        parser.error("The value '{}' in argument --method do not exists. Choose between: '{}'".format(args.method, "', '".join(possibilities)))
+        parser.error("The value '{}' in argument --method does not exist. Choose between: '{}'".format(args.method, "', '".join(possibilities)))
 
     possibilities= list_scaler_type
     possibilities.extend([None])
     if (args.scaler) not in possibilities:
-        parser.error("The value '{}' in argument --scaler do not exists. Choose between: '{}'".format(str(args.scaler), "', '".join([str(item) for item in possibilities])))
+        parser.error("The value '{}' in argument --scaler does not exist. Choose between: '{}'".format(str(args.scaler), "', '".join([str(item) for item in possibilities])))
 
     preprocess_dir= None
     if (args.preprocess_dir):
