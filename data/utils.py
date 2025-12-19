@@ -473,9 +473,9 @@ def k_fold_split_patient_data(
             warnings.warn(msg)    
         except_data = [pid for pid in except_data if pid in patient_data.keys()]
     
+    except_data = except_data if (except_data is not None) else []
     total_subjects = len(patient_data) - len(except_data)
     total_folds = ( total_subjects // val_remaining_patients ) + int( total_subjects % val_remaining_patients != 0 )
-    except_data = except_data if (except_data is not None) else []
     k_fold = []
     
     for index in range(1, total_folds+1):

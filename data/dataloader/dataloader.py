@@ -159,15 +159,14 @@ class SeizureDataset(Dataset):
         
         return data
 
-    def _compute_cross(self, curr_feature:np.ndarray|Tensor):
+    def _compute_cross(self, curr_feature:np.ndarray):
         return utils.cross_correlation(curr_feature, self.top_k)
     
-    def _compute_plv(self, curr_feature:np.ndarray|Tensor):
-        curr_feature= curr_feature.numpy() if isinstance(curr_feature, Tensor) else curr_feature
+    def _compute_plv(self, curr_feature:np.ndarray):
         curr_feature= curr_feature.transpose((1,0,2)).reshape(curr_feature.shape[1], -1)
         return utils.compute_plv_matrix(curr_feature)
     
-    def _compute_laplacian(self, curr_feature:np.ndarray|Tensor):
+    def _compute_laplacian(self, curr_feature:np.ndarray):
         adj_cross_corr = self._compute_cross(curr_feature)
         return utils.normalize_laplacian_spectrum(adj_cross_corr, self.lambda_value)
 
@@ -206,6 +205,7 @@ class SeizureDataset(Dataset):
         if (self._scaler is not None):
             curr_feature= self._scaler.transform(curr_feature)
 
+        curr_feature= curr_feature.numpy() if isinstance(curr_feature, Tensor) else curr_feature
         adj = self._compute_adj(curr_feature)
         
         # transform in tensor all numpy arrays

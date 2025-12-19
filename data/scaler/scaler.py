@@ -181,8 +181,8 @@ class MinMaxScaler(Scaler):
         Normalize data using fitted min/max values.
             :param x (np.ndarray): Input array to normalize
             :returns (Tensor): Normalized tensor with values in [0, 1]
-        """
-        return (torch.from_numpy(x) - self.min) / (self.max - self.min + 1e-15)
+        """        
+        return (torch.from_numpy(x).to(device=self.device) - self.min) / (self.max - self.min + 1e-15)
     
     def save(self, filepath:str):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -297,7 +297,7 @@ class StandardScaler(Scaler):
             :param x (np.ndarray): Input array to standardize
             :returns (Tensor): Standardized tensor with mean 0 and std 1
         """
-        return (torch.from_numpy(x) - self.mean) / (self.std + 1e-15)
+        return (torch.from_numpy(x).to(device=self.device) - self.mean) / (self.std + 1e-15)
     
     def save(self, filepath:str):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)

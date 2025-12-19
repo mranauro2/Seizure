@@ -106,10 +106,11 @@ def scaler_file_patient_ids(dictionary:dict[str, list[int]], separator:str="-") 
     """
     return separator.join(sorted([key.replace("chb", "") for key in dictionary.keys()], key=lambda x : int(x)))
 
-def scaler_load_and_save(logger:Logger, scaler:ScalerType|None, single_scaler:bool, train_dict:dict[str,list[int]], train_set:Subset, device:str) -> Scaler|None:
+def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scaler:bool, train_dict:dict[str,list[int]], train_set:Subset, device:str) -> Scaler|None:
     """Load the scaler if `scaler` is not None and save it"""
     if (scaler is not None):
-        logger.info(f"Loading scaler '{scaler.name}'...")
+        if (logger is not None):
+            logger.info(f"Loading scaler '{scaler.name}'...")
         scaler_name= "{}{}_{}.{}".format(scaler.name, '_single' if single_scaler else "", scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
         scaler_path= os.path.join(SCALER_SAVE_FOLDER, scaler_name)
         scaler:Scaler= ConcreteScaler.create_scaler(scaler, device=device)
@@ -192,9 +193,13 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
     
     return dataset
 
-def generate_loss(logger:Logger, train_dict:dict[str, list[int]], do_train:bool, loss_type:LossType, device:str) -> Loss:
-    """Modify NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA and generate the loss"""
-    global NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA
+def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:bool, loss_type:LossType, device:str) -> tuple[Loss, int, int]:
+    """
+    Modify NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA and generate the loss
+        :returns tuple(Loss, int, int): Loss function, num_seizure_data, num_not_seizure_data
+    """
+    NUM_SEIZURE_DATA = 0
+    NUM_NOT_SEIZURE_DATA = 0
     
     # set the number of seizure and not seizure data
     NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = pos_neg_samples(train_dict)
@@ -216,9 +221,10 @@ def generate_loss(logger:Logger, train_dict:dict[str, list[int]], do_train:bool,
         case _:
             raise NotImplementedError("Loss {} is not implemented yet".format(loss_type))
     loss_params_str = dict_to_str(list(loss.parameters().items()))
-    logger.info("Using loss type '{}'{}".format(loss_type.name, '' if loss_params_str=="" else f' with parameters :\n{loss_params_str}'))
+    if (logger is not None):
+        logger.info("Using loss type '{}'{}".format(loss_type.name, '' if loss_params_str=="" else f' with parameters :\n{loss_params_str}'))
     
-    return loss
+    return loss, NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA
 
 def pos_neg_samples(dictionary:dict[str, list[int]]):
     """Returns the positive and negative samples for the dictionary passed"""

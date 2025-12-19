@@ -7,7 +7,7 @@ PERIODIC_SAVE_WARN= 0.2
 
 class CheckPoint():
     """A checkpoint manager that determines when to save the model based on various criteria."""
-    def __init__(self, best_k:int=3, each_spacing:int=None, total_epochs:int=None, higher_is_better:bool=True, early_stop_patience:int=None, early_stop_start:int=None):
+    def __init__(self, best_k:int=3, each_spacing:int=None, total_epochs:int=None, higher_is_better:bool=True, early_stop_patience:int=None, early_stop_start:int=None, print_warning:bool=False):
         """
         A checkpoint manager that determines when to save the model based on various criteria.
         At each iteration of the model the function `check_saving` must be called
@@ -32,10 +32,11 @@ class CheckPoint():
         if (best_k is not None) and (best_k > BEST_K_WARN):
             warnings.warn(f"The model will save at least the best {best_k} values. This can be excessive.")
         
-        if (total_epochs is not None) and (each_spacing is not None):
+        if (total_epochs is not None) and (each_spacing is not None) and (print_warning):
             save_ratio =  1 / each_spacing
             if save_ratio > PERIODIC_SAVE_WARN:
-                warnings.warn(f"The model will be saved more than {PERIODIC_SAVE_WARN*100:.0f}% of the time. This can be excessive (current ratio: {save_ratio*100:.1f}%).")
+                msg = f"The model will be saved more than {PERIODIC_SAVE_WARN*100:.0f}% of the time. This can be excessive (current ratio: {save_ratio*100:.1f}%)."
+                warnings.warn(msg)
         
         self.each_spacing = each_spacing
         self.total_epochs = total_epochs
