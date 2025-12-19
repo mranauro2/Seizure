@@ -524,7 +524,7 @@ def split_patient_data_specific(patient_data:dict[str,list[int]], patient_ids:li
             set_data[patient_id].extend(values)
     
     if len(set_data)==0:
-        raise ValueError("No values in patient_ids are not found in patient_data. Result set is empty")
+        raise ValueError("No values in patient_ids are not found in patient_data. Result set is empty.\nPatient_ids : {}".format(", ".join(patient_ids)))
 
     return patient_data, set_data
 

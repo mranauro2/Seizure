@@ -364,7 +364,7 @@ def main_k_fold():
     """
     # take input from command line and print some informations
     loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, single_scaler, preprocess_dir)
+    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
     
     # removing unwanted patients
     remaining_data = dataset.targets_dict()
@@ -460,7 +460,7 @@ def main_test_set():
     """Main to evaluate the patients in the test"""
     # take input from command line and print some informations
     loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, single_scaler, preprocess_dir)
+    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
     
     # splitting data (and removing unwanted patients)
     remaining_data = dataset.targets_dict()
@@ -473,6 +473,9 @@ def main_test_set():
     train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
     val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
     test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict)
+    
+    # global variables
+    global DEVICE, START_EPOCH, NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA
     
     # generating new scaler
     scaler = scaler_load_and_save(LOGGER, scaler, single_scaler, train_dict, train_set, DEVICE)
@@ -502,9 +505,6 @@ def main_test_set():
         string+= "\n\tTotal negative samples  : {:>{}}/{:,}".format(samples_neg, len(str(samples_pos+samples_neg)), samples_pos+samples_neg)
         string+= "\n\tPositive ratio          : {:.3f}%".format(100 * samples_pos / (samples_pos+samples_neg))
         LOGGER.info(string)
-    
-    # global variables
-    global DEVICE, START_EPOCH, NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA
     
     # load model if exists or create a new model
     LOGGER.info("Loading model...")
@@ -550,4 +550,4 @@ if __name__=='__main__':
         main_test_set()
         
     else:
-        raise ValueError("Not implemented yet")
+        raise ValueError("All choises are set to None")
