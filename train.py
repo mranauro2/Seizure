@@ -237,13 +237,16 @@ def train(
     if (test_loader is not None):
         array_test=  np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
     
+    # change MODEL_PARTIAL_PATH if needed
+    if K_FOLD:
+        global MODEL_PARTIAL_PATH
+        MODEL_PARTIAL_PATH= os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_{folder_number}", MODEL_NAME)
+    
     # fusion with old metrics if exist (the folder position and metrics retrieved can be different)
-    if START_EPOCH!=0:
+    if START_EPOCH != 0:
         if TEST_PATIENT_IDS:
             epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
         if K_FOLD:
-            global MODEL_PARTIAL_PATH
-            MODEL_PARTIAL_PATH= os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_{folder_number}", MODEL_NAME)
             epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{os.path.basename(METRICS_SAVE_FOLDER)}_{folder_number}", f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
             
         for index,name in enumerate(metrics_name):
@@ -309,7 +312,7 @@ def train(
         # conditions to save the model
         saved_files= []
         if checkpoint_observer.check_saving(used_metric) or checkpoint_observer.check_early_stop() or check_stop_file(STOP_FILE):
-            file_path= f"{MODEL_PARTIAL_PATH}_{epoch_num+START_EPOCH+1}.{MODEL_EXTENTION}"
+            file_path= f"{MODEL_PARTIAL_PATH}_{epoch_num+START_EPOCH+1}.{MODEL_EXTENTION}"            
             saved_files.append(file_path)
             model.save(file_path)
             
@@ -414,7 +417,7 @@ def main_k_fold():
         
         for train_dict,val_dict in TqdmMinutesAndHours(k_fold, desc="K-Fold", leave=False):
             if print_info:
-                print("\n")
+                print("\n\n")
             
             train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
             val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
