@@ -161,7 +161,7 @@ def generate_model(dataset:SeizureDataset, device:str):
     
     return model
 
-def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], method:SeizureDatasetMethod, lambda_value:float|None, scaler:ScalerType|None, preprocess_dir:str|None, min_sample_per_batch:int):
+def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], method:SeizureDatasetMethod, lambda_value:float|None, scaler:ScalerType|None, preprocess_dir:str|None):
     """Generate the dataset"""
     string_additional_info= additional_info(
         preprocessed_data=(preprocess_dir is not None),
@@ -175,7 +175,6 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
     logger.info(string)
     
     # load dataset
-    logger.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(min_sample_per_batch, BATCH_SIZE, 100 * min_sample_per_batch / BATCH_SIZE))
     dataset= SeizureDataset(
         input_dir= input_dir,
         files_record= files_record,

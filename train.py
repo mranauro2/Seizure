@@ -364,7 +364,7 @@ def main_k_fold():
     """
     # take input from command line and print some informations
     loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, single_scaler, preprocess_dir, MIN_SAMPLER_PER_BATCH)
+    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, single_scaler, preprocess_dir)
     
     # removing unwanted patients
     remaining_data = dataset.targets_dict()
@@ -416,7 +416,7 @@ def main_k_fold():
             train_sampler = None
             if (MIN_SAMPLER_PER_BATCH != 0):
                 train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
-                LOGGER.info("train_sampler is created successful")
+                LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
 
             train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
             val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
@@ -460,7 +460,7 @@ def main_test_set():
     """Main to evaluate the patients in the test"""
     # take input from command line and print some informations
     loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, single_scaler, preprocess_dir, MIN_SAMPLER_PER_BATCH)
+    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, single_scaler, preprocess_dir)
     
     # splitting data (and removing unwanted patients)
     remaining_data = dataset.targets_dict()
@@ -483,7 +483,7 @@ def main_test_set():
     train_sampler = None
     if (MIN_SAMPLER_PER_BATCH != 0):
         train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
-        LOGGER.info("train_sampler is created successful")
+        LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
 
     train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
     test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
