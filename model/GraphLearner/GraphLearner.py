@@ -242,7 +242,7 @@ class GraphLearner(nn.Module):
             for i in range(context.size(0)):
                 h = context[i]
                 ad = adj[i]
-                attention_ = graph_attention.forward(h, ad)
+                attention_ = graph_attention(h, ad)
                 attention_head.append(attention_)
             attention_head = torch.stack(attention_head, 0)
             attention.append(attention_head)
@@ -268,7 +268,7 @@ class GraphLearner(nn.Module):
         batch_size, num_nodes, _ = adj.shape
         x_batched, edge_index_batched, edge_attr_batched = self._create_batch(context, adj)
         
-        attention_batched = self.att.forward(x_batched, edge_index_batched, edge_attr=edge_attr_batched)
+        attention_batched = self.att(x_batched, edge_index_batched, edge_attr=edge_attr_batched)
         
         # Reshape (batch_size * num_nodes, num_nodes) --> (batch_size, num_nodes, num_nodes)
         attention = attention_batched.reshape(batch_size, num_nodes, -1)
@@ -296,7 +296,7 @@ class GraphLearner(nn.Module):
         attention_batched = x_batched
         for block in self.att:
             transformer:TransformerConv = block[0]
-            attention_batched = transformer.forward(attention_batched, edge_index_batched, edge_attr=edge_attr_batched)
+            attention_batched = transformer(attention_batched, edge_index_batched, edge_attr=edge_attr_batched)
             
             for layer in block[1:]:
                 attention_batched = layer.forward(attention_batched)

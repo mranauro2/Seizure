@@ -136,7 +136,7 @@ class SGLC_Encoder(nn.Module):
                 if self.hidden_per_step:
                     for cell_idx,cell in enumerate(self.encoding_cells):
                         hidden_state = current_hidden[cell_idx]
-                        input_t, current_supports, hidden_state = cell.forward(input_t, current_supports, hidden_state)
+                        input_t, current_supports, hidden_state = cell(input_t, current_supports, hidden_state)
                         updated_states.append(hidden_state)
                     
                     # Update store output
@@ -146,7 +146,7 @@ class SGLC_Encoder(nn.Module):
                 # Pass through each encoding cell (case single hidden state)
                 else:
                     for cell in self.encoding_cells:
-                        input_t, current_supports, current_hidden = cell.forward(input_t, current_supports, current_hidden)
+                        input_t, current_supports, current_hidden = cell(input_t, current_supports, current_hidden)
                 
                     # Update store output
                     processed_inputs.append(input_t)
@@ -154,7 +154,7 @@ class SGLC_Encoder(nn.Module):
             # Pass through each encoding cell (case no hidden state)
             else:
                 for cell in self.encoding_cells:                
-                    input_t, current_supports = cell.forward(input_t, current_supports)
+                    input_t, current_supports = cell(input_t, current_supports)
 
                 # Update store output
                 processed_inputs.append(input_t)
@@ -310,9 +310,9 @@ class SGLC_Classifier(nn.Module):
             else:
                 init_hidden_state = torch.zeros_like( self.encoder.hidden_state_empty(batch_size=input_seq.size(1))[0] )
             init_hidden_state = init_hidden_state.to(device=self.device)
-            input_seq, supports, _ = self.encoder.forward(input_seq, supports, init_hidden_state)
+            input_seq, supports, _ = self.encoder(input_seq, supports, init_hidden_state)
         else:
-            input_seq, supports = self.encoder.forward(input_seq, supports)
+            input_seq, supports = self.encoder(input_seq, supports)
         
         features_mean= input_seq[-1]
         features_mean= features_mean.reshape(features_mean.size(0), -1)

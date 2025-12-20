@@ -135,13 +135,13 @@ class GGNNLayer(nn.Module):
                 a = torch.cat((a_in, a_out), dim=2)
                 a = a.reshape(batch_size*self.num_nodes, 2*self.input_dim)      # a in 2D
                 
-                x = self.propagator.forward(a, x)
+                x = self.propagator(a, x)
 
             x = x.reshape(batch_size, self.num_nodes, self.input_dim)           # x in 3D
             
         else:
             for _ in range(self.num_steps):
-                x = self.propagator.forward(x, supports)
+                x = self.propagator(x, supports)
 
         # (batch_size, num_nodes, output_dim)
         x:Tensor = self.fc(x)  

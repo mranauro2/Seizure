@@ -94,7 +94,7 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
             target:Tensor= target.to(device=DEVICE)
             adj:Tensor= adj.to(device=DEVICE)
             
-            result, node_matrix, adj_matrix = model.forward(x, adj)
+            result, node_matrix, adj_matrix = model(x, adj)
             
             # reshape from (batch_size, seq_length, num_nodes, input_dim) to (batch_size, num_nodes, seq_length*input_dim) for smoothness_loss_func
             node_matrix_for_smooth= node_matrix.transpose(dim0=1, dim1=2)
@@ -344,25 +344,8 @@ def main_k_fold():
     """Main to evaluate the performance with k-fold cross validation"""
     
     """
-    Stampare le informazioni
-    Caricare il dataset
-    Fare la divisione k_fold + mostrarla a schermo + (info aggiuntive come %?)
-    
-    per ogni N checkpoints:
-        per ogni fold:
-            Creare il modello
-            Verificare la presenza della cartella + caricare il modello
-            Caricare lo scaler + applicarlo al dataset
-            Avviare l'addestramento del fold corrente fino a CHECKPOINT EPOCHS
-    
     In tutto questo bisogna:
-        modificare il valore di start_epoch
-        DONE    aggiornare il training per creare le cartelle adatte in caso di k_fold
-        aggiungere TQDM globale per vedere l'andamento complessivo
-        togliere chb16
-        DONE    verificare come far funzionare early stop and il file
         poi correggere il checkpoint manager
-        DONE    aggiungere verbose e show progress in train
         capire come poter usare thread o simili per lanciare più job insieme dallo stesso file
     """
     # take input from command line and print some informations
@@ -400,13 +383,15 @@ def main_k_fold():
     # global variables
     global DEVICE, START_EPOCH, NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA
     
+    # print some informations
     DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
     LOGGER.info(f"Using {DEVICE} device...")
-    
     if (MIN_SAMPLER_PER_BATCH != 0):
         LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
     if (scaler_type is not None):
         LOGGER.info(f"Loading scaler '{scaler_type.name}'...")
+    _ = generate_loss(LOGGER, k_fold[0][0], do_train, loss_type, DEVICE)
+    LOGGER.info("To stop the execution create the file '{}' in the current folder".format(os.path.basename(STOP_FILE)))
     
     # training at most MAX_NUM_EPOCHS iterative for each fold
     print_info = True
@@ -416,9 +401,6 @@ def main_k_fold():
         current_epochs = MAX_NUM_EPOCHS if (index*MAX_NUM_EPOCHS <= num_epochs) else (num_epochs % MAX_NUM_EPOCHS)
         
         for train_dict,val_dict in TqdmMinutesAndHours(k_fold, desc="K-Fold", leave=False):
-            if print_info:
-                print("\n\n")
-            
             train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
             val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
             
@@ -432,8 +414,8 @@ def main_k_fold():
             if (MIN_SAMPLER_PER_BATCH != 0):
                 train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
 
-            train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
-            val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
+            train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
+            val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
             
             # load model if exists or create a new model            
             model= generate_model(dataset, DEVICE)
@@ -446,9 +428,9 @@ def main_k_fold():
                 raise ValueError(f"Evaluation stopped, model not present in the '{MODEL_SAVE_FOLDER}' folder")
             if len(filename)!=0:
                 model= model.load(filename, device=DEVICE)
-                LOGGER.info(f"Loaded '{os.path.basename(filename)}'...")
+                # LOGGER.info(f"Loaded '{filename}' for folder '{folder_number}'...")
                 
-            loss, NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = generate_loss(LOGGER if print_info else None, train_dict, do_train, loss_type, DEVICE)
+            loss, NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = generate_loss(None, train_dict, do_train, loss_type, DEVICE)
             
             # start train or evaluation
             if do_train:
@@ -456,7 +438,7 @@ def main_k_fold():
                 interrupt =train(
                                     train_loader, val_loader, None,
                                     model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=current_epochs,
-                                    verbose=print_info, evaluation_verbose=False,
+                                    verbose=False, evaluation_verbose=False,
                                     show_progress=True, show_inner_progress="first" if print_info else False,
                                     folder_number=folder_number
                                 )

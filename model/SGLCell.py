@@ -141,14 +141,14 @@ class SGLC_Cell(nn.Module):
             ], dim=2)
             ggnn_input= ggnn_input.reshape(batch_size, -1)
             
-            inputs = torch.sigmoid(self.ggnn.forward(ggnn_input, supports))
-            state= self.gru.forward(inputs, state)
+            inputs = torch.sigmoid(self.ggnn(ggnn_input, supports))
+            state= self.gru(inputs, state)
             
             return inputs, supports, state
         
         # if not use_GRU
         else:
-            inputs = torch.sigmoid(self.ggnn.forward(inputs, supports))
+            inputs = torch.sigmoid(self.ggnn(inputs, supports))
             return inputs, supports
 
     def hidden_state_empty(self, batch_size:int) -> Tensor:

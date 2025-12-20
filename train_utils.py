@@ -67,7 +67,7 @@ def get_model(dir:str, specific_num:int=None) -> tuple[str, int]:
     
     Returns:
         tuple(str, int):
-            - filename (str):   Full filepath (including directory path) of the matching model file. If no matching files exist returnsa an empty string
+            - filename (str):   Full filepath (including directory path) of the matching model file. If no matching files exist returns an empty string
             - epoch (int):      Number found for the full filepath
     """
     pattern= re.compile(r'_(\d+)\.(\D+)$')
