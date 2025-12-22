@@ -45,19 +45,19 @@ K_FOLD= 3
 PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""
 
-PERCENTAGE_BOTH_CLASS_IN_BATCH= 1
+PERCENTAGE_BOTH_CLASS_IN_BATCH= 15
 """Min percentage number of both class in a batch. If set to None does not use a sampler in the DataLoader"""
 
-BATCH_SIZE= 64
+BATCH_SIZE= 96
 """Batch size used during the training. The last batch can have different size"""
 
-NUM_WORKERS= 16
+NUM_WORKERS= 12
 """How many subprocesses to use for data loading"""
 
 RANDOM_STATE= 13
 """Controls the shuffling applied to the data before applying the split. Pass an int for reproducible output across multiple function calls"""
 
-RANDOM_SEED= None
+RANDOM_SEED= 0
 """Seed to controls the weights initializations. If None, don't use any seed"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -67,7 +67,7 @@ RANDOM_SEED= None
 LEARNING_RATE= 1e-6
 """Learning rate of the model"""
 
-USE_WEIGHT= False
+USE_WEIGHT= True
 """If True, will be use weighted loss if available"""
 
 FOCAL_LOSS_APLHA= 0.99
@@ -89,7 +89,7 @@ MAX_NUM_EPOCHS= 5
 PERCENTAGE_MARGIN= 0.00
 """Percentage of margin needed with respect to the metric considered to save the model"""
 
-EARLY_STOP_PATIENCE= 20 
+EARLY_STOP_PATIENCE= None
 """Number of epochs to wait to early stop the model training"""
 
 START_USE_EARLY_STOP= 20

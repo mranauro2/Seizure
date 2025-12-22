@@ -51,83 +51,87 @@ DAMP_SPARSITY= 0.0
 """Damping factor for :func:`model.loss_functions.sparsity_loss_func`. Set to 0 to not use it"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-# INFO FOR model.ASGPFmodel.SGLCModel_classification
+# INFO FOR model.ASGPFmodel.SGLC_Classifier
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 NUM_CLASSES= 2
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Number of output classes"""
 
 NUM_CELLS= 2
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Number of the :data:`model.SGLCell.SGLCell` layers in the encoder stack"""
 
 GRAPH_SKIP_CONN= 0.3
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Skip connection weight for adjacency updates"""
 
 USE_GRU= False
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Use GRU module in the :data:`model.SGLCell.SGLC_Cell` and hidden state in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
+HIDDEN_PER_STEP= True
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Use a new hidden state for each time step (only if USE_GRU is True) in the :data:`model.ASGPFmodel.SGLC_Encoder` module"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # GRAPH LEARNER VALUES
 
 HIDDEN_DIM_GL= 192
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Hidden dimension for the :data:`model.GraphLearner.GraphLearner` module"""
 
 ATTENTION_TYPE= GraphLearnerAttention.GRAPH_ATTENTION_LAYER
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Type of attention used in the :data:`model.GraphLearner.GraphLearner` module"""
 
 NUM_LAYERS= 3
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Number of message passing layers in the GAT or Transformer module for the :data:`model.GraphLearner.GraphLearner` module"""
 
 NUM_HEADS= 8
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Number of heads for multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
 DROPOUT= 0.4
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Dropout probability applied in the attention layer for the :data:`model.GraphLearner.GraphLearner` module"""
 
 EPSILON= None
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Threshold for deleting weak connections in the learned graph for the :data:`model.GraphLearner.GraphLearner` module. If None, no deleting is applied"""
 
 ACT= 'relu'
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Non-linear activation function to use in the :data:`model.GraphLearner.GraphLearner` module"""
 
 USE_SIGMOID= False
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Use the sigmoid as activation function after the computation of the attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
 USE_GATv2= False
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
 CONCAT= False
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Concatenate (True) or average (False) the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
 BETA= False
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 If True will combine aggregation and skip information in the :data:`model.GraphLearner.GraphLearner` module"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # GATED GRAPH NEURAL NETWORKS VALUES
 
 HIDDEN_DIM_GGNN= 192
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Hidden dimension in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module. Only if `USE_GRU` is True"""
 
 NUM_STEPS= 6
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Number of propagation steps in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
 USE_GRU_IN_GGNN= False
-"""Used in :data:`model.ASGPFmodel.SGLCModel_classification` \\
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Use the GRU module instead of the standard propagator in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""

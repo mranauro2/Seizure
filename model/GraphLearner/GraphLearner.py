@@ -24,13 +24,17 @@ class GraphLearner(nn.Module):
             input_size:int,
             hidden_size:int,
             num_nodes:int=21,
-            num_heads:int=16,
+            
             attention:GraphLearnerAttention=GraphLearnerAttention.GRAPH_ATTENTION_LAYER,
             num_layers:int=3,
+            num_heads:int=16,
+            
             dropout:float=0.5,
             epsilon:float=None,
             device:str=None,
+            
             *,
+            
             seed:int=None,
             use_sigmoid:bool=False,
             act:str|Callable='relu',
@@ -44,9 +48,10 @@ class GraphLearner(nn.Module):
             input_size (int):                   Dimension of input node features
             hidden_size (int):                  Hidden dimension for attention computation
             num_nodes (int):                    Number of nodes in input graph
-            num_heads (int):                    Number of heads for multi-head attention
+            
             attention (GraphLearnerAttention):  Type of attention used
             num_layers (int):                   Number of message passing layers in the module
+            num_heads (int):                    Number of heads for multi-head attention
             
             dropout (float):                    Dropout probability applied in the attention layer
             epsilon (float):                    Threshold for deleting weak connections in the learned graph. If None, no deleting is applied
@@ -166,6 +171,23 @@ class GraphLearner(nn.Module):
         layers = nn.ModuleList()
         out_channels = hidden_size//num_heads if concat else hidden_size
         
+        # case single layer
+        if (num_layers==1):
+            block = nn.ModuleList()
+            block.append(
+                TransformerConv(
+                    in_channels  = input_size,
+                    out_channels = num_nodes,
+                    heads        = num_heads,
+                    concat       = concat,
+                    beta         = beta,
+                    dropout      = dropout,
+                    edge_dim     = edge_dim
+                )
+            )
+            layers.append(block)
+            return layers.to(device=device)
+        
         # First layer
         block = nn.ModuleList()
         block.append(
@@ -179,8 +201,7 @@ class GraphLearner(nn.Module):
                 edge_dim     = edge_dim
             )
         )
-        if (num_layers > 1):
-            block.append(act)
+        block.append(act)
         layers.append(block)
         
         # Intermediate layers
@@ -200,19 +221,18 @@ class GraphLearner(nn.Module):
             layers.append(block)
         
         # Last layer
-        if (num_layers > 1):
-            block = nn.ModuleList([
-                TransformerConv(
-                    in_channels  = hidden_size,
-                    out_channels = num_nodes//num_heads if concat else num_nodes,
-                    heads        = num_heads,
-                    concat       = concat,
-                    beta         = beta,
-                    dropout      = dropout,
-                    edge_dim     = edge_dim
-                )
-            ])
-            layers.append(block)
+        block = nn.ModuleList([
+            TransformerConv(
+                in_channels  = hidden_size,
+                out_channels = num_nodes//num_heads if concat else num_nodes,
+                heads        = num_heads,
+                concat       = concat,
+                beta         = beta,
+                dropout      = dropout,
+                edge_dim     = edge_dim
+            )
+        ])
+        layers.append(block)
             
         return layers.to(device=device)
 

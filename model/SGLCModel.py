@@ -71,6 +71,16 @@ class SGLC_Encoder(nn.Module):
         self.use_GRU = use_GRU
         self.hidden_per_step = hidden_per_step
         
+        if not(use_GRU) and (hidden_per_step):
+            warnings.warn("Parameter 'hidden_per_step' is ignored because 'use_GRU' is False")
+        
+        if not(use_GRU):
+            self._forward = self._cell_forward
+        elif not(hidden_per_step):
+            self._forward = self._cell_forward_GRU
+        else:
+            self._forward = self._cell_forward_GRU_hidden_per_step
+        
         encoding_cells = list()
         for _ in range(num_cells):
             encoding_cells.append(
@@ -99,7 +109,52 @@ class SGLC_Encoder(nn.Module):
             )
         self.encoding_cells = nn.ModuleList(encoding_cells)
     
-    def forward(self, inputs: torch.Tensor, supports: torch.Tensor, initial_hidden_state: torch.Tensor = None):
+    def _cell_forward(self, input_t:Tensor, supports:Tensor, hidden_state:Tensor=None):
+        """
+        Compute the new representation of the parameters using the stack of SGLCell modules
+            :param inputs (Tensor):                 Matrix of node with size (sequential_length, batch_size, num_nodes, input_dim)
+            :param supports (Tensor):               Adjacency matrix with size (batch_size, num_nodes, num_nodes)
+            :param initial_hidden_state (Tensor):   Not used. Present for compatibility
+            :returns tuple(Tensor, Tensor, Tensor): Update matrices of the input
+        """
+        for cell in self.encoding_cells:
+            input_t, supports = cell(input_t, supports)
+        
+        return input_t, supports, hidden_state
+    
+    def _cell_forward_GRU(self, input_t:Tensor, supports:Tensor, hidden_state:Tensor=None):
+        """
+        Compute the new representation of the parameters using the stack of SGLCell modules
+            :param inputs (Tensor):                 Matrix of node with size (sequential_length, batch_size, num_nodes, input_dim)
+            :param supports (Tensor):               Adjacency matrix with size (batch_size, num_nodes, num_nodes)
+            :param initial_hidden_state (Tensor):   Hidden state matrix with size (batch_size, num_nodes\*hidden_dim)
+            :returns tuple(Tensor, Tensor, Tensor): Update matrices of the input
+        """
+        for cell in self.encoding_cells:
+            input_t, supports, hidden_state = cell(input_t, supports, hidden_state)
+        
+        return input_t, supports, hidden_state
+    
+    def _cell_forward_GRU_hidden_per_step(self, input_t:Tensor, supports:Tensor, hidden_state:Tensor=None):
+        """
+        Compute the new representation of the parameters using the stack of SGLCell modules
+            :param inputs (Tensor):                 Matrix of node with size (sequential_length, batch_size, num_nodes, input_dim)
+            :param supports (Tensor):               Adjacency matrix with size (batch_size, num_nodes, num_nodes)
+            :param initial_hidden_state (Tensor):   Hidden state matrix with size (num_cells, batch_size, num_nodes\*hidden_dim)
+            :returns tuple(Tensor, Tensor, Tensor): Update matrices of the input
+        """
+        updated_states = []
+        
+        for cell_idx,cell in enumerate(self.encoding_cells):
+            current_hidden = hidden_state[cell_idx]
+            input_t, supports, current_hidden = cell(input_t, supports, current_hidden)
+            updated_states.append(current_hidden)
+        
+        hidden_state = torch.stack(updated_states, dim=0)
+        
+        return input_t, supports, hidden_state
+    
+    def forward(self, inputs:Tensor, supports:Tensor, initial_hidden_state:Tensor=None):
         """
         Compute the new representation of the parameters using the stack of SGLCell modules
         
@@ -126,39 +181,11 @@ class SGLC_Encoder(nn.Module):
         current_hidden = initial_hidden_state
 
         # Process each timestep
-        cell:SGLC_Cell= None
         for t in range(seq_length):
             input_t = inputs[t]
-            updated_states = []
-
-            # Pass through each encoding cell (case hidden state per cell)
-            if self.use_GRU:
-                if self.hidden_per_step:
-                    for cell_idx,cell in enumerate(self.encoding_cells):
-                        hidden_state = current_hidden[cell_idx]
-                        input_t, current_supports, hidden_state = cell(input_t, current_supports, hidden_state)
-                        updated_states.append(hidden_state)
-                    
-                    # Update store output
-                    current_hidden = torch.stack(updated_states, dim=0)
-                    processed_inputs.append(input_t)
-                
-                # Pass through each encoding cell (case single hidden state)
-                else:
-                    for cell in self.encoding_cells:
-                        input_t, current_supports, current_hidden = cell(input_t, current_supports, current_hidden)
-                
-                    # Update store output
-                    processed_inputs.append(input_t)
-            
-            # Pass through each encoding cell (case no hidden state)
-            else:
-                for cell in self.encoding_cells:                
-                    input_t, current_supports = cell(input_t, current_supports)
-
-                # Update store output
-                processed_inputs.append(input_t)
-
+            input_t, current_supports, current_hidden = self._forward(input_t, current_supports, current_hidden)
+            processed_inputs.append(input_t)
+  
         # Reconstruct output tensor with original spatial dimensions
         new_input_representation = torch.stack(processed_inputs, dim=0)
         new_input_representation = new_input_representation.reshape(*original_shape)
@@ -304,13 +331,18 @@ class SGLC_Classifier(nn.Module):
         # Transpose: (batch_size, seq_length, num_nodes, input_dim) --> (seq_length, batch_size, num_nodes, input_dim)
         input_seq = torch.transpose(input_seq, dim0=0, dim1=1)
         
+        # case GRU and hidden per step
         if self.use_GRU:
             if self.hidden_per_step:
                 init_hidden_state = torch.zeros_like( self.encoder.hidden_state_empty(batch_size=input_seq.size(1)) )
+        
+        # case GRU and single hidden
             else:
                 init_hidden_state = torch.zeros_like( self.encoder.hidden_state_empty(batch_size=input_seq.size(1))[0] )
             init_hidden_state = init_hidden_state.to(device=self.device)
             input_seq, supports, _ = self.encoder(input_seq, supports, init_hidden_state)
+        
+        # case no GRU
         else:
             input_seq, supports = self.encoder(input_seq, supports)
         

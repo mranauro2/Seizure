@@ -138,6 +138,7 @@ def generate_model(dataset:SeizureDataset, device:str):
         
         graph_skip_conn = GRAPH_SKIP_CONN,
         use_GRU         = USE_GRU,
+        hidden_per_step = HIDDEN_PER_STEP,
         
         hidden_dim_GL   = HIDDEN_DIM_GL,
         attention_type  = ATTENTION_TYPE,
@@ -276,7 +277,8 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     model_tuple = [
         ("NUM_CELLS", NUM_CELLS),
         ("GRAPH_SKIP_CONN", GRAPH_SKIP_CONN),
-        ("USE_GRU", USE_GRU)
+        ("USE_GRU", USE_GRU),
+        ("HIDDEN_PER_STEP", HIDDEN_PER_STEP)
     ]
     model_str = "Model info:\n{}".format(dict_to_str(model_tuple))
     

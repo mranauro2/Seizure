@@ -397,6 +397,7 @@ def main_k_fold():
     print_info = True
     total_training = ( num_epochs // MAX_NUM_EPOCHS ) + int( num_epochs % MAX_NUM_EPOCHS != 0 )    
     LOGGER.info(f'Start training : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
+    
     for index in TqdmMinutesAndHours(range(1, total_training+1), desc="Iteration"):
         current_epochs = MAX_NUM_EPOCHS if (index*MAX_NUM_EPOCHS <= num_epochs) else (num_epochs % MAX_NUM_EPOCHS)
         
@@ -428,14 +429,13 @@ def main_k_fold():
                 raise ValueError(f"Evaluation stopped, model not present in the '{MODEL_SAVE_FOLDER}' folder")
             if len(filename)!=0:
                 model= model.load(filename, device=DEVICE)
-                # LOGGER.info(f"Loaded '{filename}' for folder '{folder_number}'...")
                 
             loss, NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = generate_loss(None, train_dict, do_train, loss_type, DEVICE)
             
             # start train or evaluation
             if do_train:
-                optimizer= torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-                interrupt =train(
+                optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+                interrupt = train(
                                     train_loader, val_loader, None,
                                     model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=current_epochs,
                                     verbose=False, evaluation_verbose=False,
@@ -446,7 +446,7 @@ def main_k_fold():
                 if interrupt:
                     break
             else:
-                eval(val_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
+                raise NotImplementedError("Evaluation method with k-fold is not implemented yet")
     LOGGER.info(f'Stop training  : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
     
 def main_test_set():
