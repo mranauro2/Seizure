@@ -213,8 +213,11 @@ metrics/
 others/
 images/
 not_used/
+PositionalEncoding2D-master/
 utils/plot_scaler.ipynb
 dataset_split.ipynb
 line_sampler.ipynb
 model_flow.ipynb
 torchview_flow.ipynb
+utils/rename_all.py
+transformer.ipynb
