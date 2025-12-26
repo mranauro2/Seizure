@@ -16,7 +16,6 @@ import numpy as np
 
 class Scaler(ABC):
     """Abstract Scaler class to normalize the data"""
-    @abstractmethod
     def __init__(self, device:str=None):
         """
             :param device (str): Device where do computations on ('cuda', 'cpu', etc.)
