@@ -1,7 +1,7 @@
 import argparse
 from model.loss.LossType import LossType
 from data.scaler.ScalerType import ScalerType
-from data.dataloader.SeizureDatasetMethod import SeizureDatasetMethod
+from data.dataloader.SeizureDataset import SeizureDatasetMethod
 
 
 def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, float|None, ScalerType|None, bool, int, bool, int, bool, str|None]:
