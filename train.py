@@ -5,19 +5,20 @@
 import torch
 from torch.utils.data import DataLoader, Subset
 
-from utils.constant.constants_main import *
-from utils.constant.constants_eeg import *
 from utils.classes.Checkpoint_manager import CheckPoint
 from utils.classes.Metric_manager import Metrics
 from utils.classes.Metrics_classes import *
-from data.scaler.scaler import *
+from utils.constant.constants_main import *
+from utils.constant.constants_eeg import *
+from data.scaler.Scaler import *
 from data.utils import *
 from train_utils import *
 
-from data.dataloader.dataloader import SeizureDataset, SeizureSampler
+from data.dataloader.SeizureDataset import SeizureDataset
+from data.dataloader.SeizureSampler import SeizureSampler
 
+from model.SGLClassifier import SGLC_Classifier
 from model.loss.loss_regularization import *
-from model.SGLCModel import SGLC_Classifier
 from model.loss.loss_classes import *
 
 from train_args import parse_arguments
@@ -244,7 +245,7 @@ def train(
     
     # fusion with old metrics if exist (the folder position and metrics retrieved can be different)
     if START_EPOCH != 0:
-        if TEST_PATIENT_IDS:
+        if (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
             epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
         if K_FOLD:
             epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{os.path.basename(METRICS_SAVE_FOLDER)}_{folder_number}", f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
@@ -295,7 +296,7 @@ def train(
         
         # save the metrics at each iteration
         for index,name in enumerate(metrics_name):
-            if TEST_PATIENT_IDS:
+            if (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
                 intermediate = ""
             if K_FOLD:
                 intermediate = f"{os.path.basename(METRICS_SAVE_FOLDER)}_{folder_number}"
@@ -325,13 +326,14 @@ def train(
         if checkpoint_observer.check_early_stop():
             LOGGER.warning(f"Reached early stop at epoch {epoch_num+1}")
             interrupt = True
-            break
         
         # check stop file
         if check_stop_file(STOP_FILE):
             LOGGER.warning("Stop file '{}' found. Stopped at epoch {}".format(os.path.basename(STOP_FILE), epoch_num+1))
             delete_stop_file(STOP_FILE)
             interrupt = True
+        
+        if interrupt and (K_FOLD is None):
             break
     
     return interrupt
@@ -395,6 +397,7 @@ def main_k_fold():
     
     # training at most MAX_NUM_EPOCHS iterative for each fold
     print_info = True
+    epoch_interrupted = False
     total_training = ( num_epochs // MAX_NUM_EPOCHS ) + int( num_epochs % MAX_NUM_EPOCHS != 0 )    
     LOGGER.info(f'Start training : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
     
@@ -434,7 +437,7 @@ def main_k_fold():
             
             # start train or evaluation
             if do_train:
-                optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+                optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)                
                 interrupt = train(
                                     train_loader, val_loader, None,
                                     model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=current_epochs,
@@ -443,10 +446,14 @@ def main_k_fold():
                                     folder_number=folder_number
                                 )
                 print_info = False
-                if interrupt:
-                    break
+                epoch_interrupted = (epoch_interrupted and interrupt)
             else:
                 raise NotImplementedError("Evaluation method with k-fold is not implemented yet")
+            
+        if epoch_interrupted:
+            LOGGER.warning(f"Interruption detected after completing epoch for all folds")
+            break
+
     LOGGER.info(f'Stop training  : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
     
 def main_test_set():
@@ -456,22 +463,19 @@ def main_test_set():
     dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
     
     # splitting data (and removing unwanted patients)
-    remaining_data = dataset.targets_dict()
-    if (EXCEPT_DATA is not None):
-        remaining_data, _ = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)
-        
-    remaining_data, test_dict = split_patient_data_specific(remaining_data, TEST_PATIENT_IDS)
-    train_dict, val_dict = split_patient_data(remaining_data, split_ratio=PERCENTAGE_TRAINING_SPLIT)
+    remaining_data = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)[0] if (EXCEPT_DATA is not None) else dataset.targets_dict()
+    
+    test_dict = None
+    if (TEST_PATIENT_IDS is not None):
+        remaining_data, test_dict = split_patient_data_specific(remaining_data, TEST_PATIENT_IDS)
+    train_dict, val_dict = split_patient_data(remaining_data, split_ratio=PERCENTAGE_TRAINING_SPLIT) if (VAL_PATIENT_IDS is None) else split_patient_data_specific(remaining_data, VAL_PATIENT_IDS)
     
     train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
     val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
-    test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict)
+    test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict) if (test_dict is not None) else None
     
     # global variables
     global DEVICE, START_EPOCH, NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA
-    
-    DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
-    LOGGER.info(f"Using {DEVICE} device...")
     
     # generating new scaler
     scaler = scaler_load_and_save(LOGGER, scaler, single_scaler, train_dict, train_set, device='cpu')
@@ -485,8 +489,8 @@ def main_test_set():
         LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
 
     train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
-    test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
     val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
+    test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True) if (test_set is not None) else None
     
     # print on screen some informations
     names= ["test", "train", "validation"]
@@ -494,6 +498,8 @@ def main_test_set():
     ljust_value= len(max(names))
     
     for name,dictionary in zip(names,dictionaries):
+        if (dictionary is None):
+            continue
         string = "" 
         samples_pos, samples_neg = pos_neg_samples(dictionary)
         string+= "Using patient(s) for {} : '{}'".format(name.ljust(ljust_value), ", ".join(dictionary.keys()))
@@ -503,8 +509,9 @@ def main_test_set():
         LOGGER.info(string)
     
     # load model if exists or create a new model
+    DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
+    LOGGER.info(f"Using {DEVICE} device...")
     LOGGER.info("Loading model...")
-            
     model= generate_model(dataset, DEVICE)
     
     filename, num_epoch = get_model(MODEL_SAVE_FOLDER, specific_num=save_num)
@@ -532,15 +539,19 @@ def main_test_set():
         eval(test_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
 
 if __name__=='__main__':
-    if K_FOLD and TEST_PATIENT_IDS:
-        raise ValueError("The variables K_FOLD, TEST_PATIENT_IDS are not None. Only one can be not None")
+    if K_FOLD and (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
+        raise ValueError("The variables K_FOLD, TEST_PATIENT_IDS, VAL_PATIENT_IDS are not None. Only one can be not None")
     
     if K_FOLD:
         LOGGER.info("Execution with k-fold cross validation\n")
         main_k_fold()
         
-    elif TEST_PATIENT_IDS:
-        LOGGER.info("Execution with patients as test set\n")
+    elif (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
+        LOGGER.info("Execution with patients as {}{}{} set\n".format(
+            "test" if (TEST_PATIENT_IDS) else "",
+            " and " if (TEST_PATIENT_IDS and VAL_PATIENT_IDS) else "",
+            "validation" if (VAL_PATIENT_IDS) else ""
+        ))
         main_test_set()
         
     else:
