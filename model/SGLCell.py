@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch import Tensor
 
 import warnings
+from typing import Callable
 
 from model.GatedGraphNeuralNetworks import GGNNLayer
 from model.GraphLearner.GraphLearner import GraphLearner
@@ -22,13 +23,15 @@ class SGLC_Cell(nn.Module):
             
             hidden_dim_GL:int=100,
             attention_type:GraphLearnerAttention=GraphLearnerAttention.TRANSFORMER_CONV,
-            num_layers:int=3,
+            num_GL_layers:int=3,
             num_heads:int=8,
             dropout:float=0.0,
             epsilon:float=None,
             
             hidden_dim_GGNN:int=None,
             num_steps:int=5,
+            num_GGNN_layers:int=1,
+            act_GGNN:str|Callable=None,
             use_GRU_in_GGNN:bool=False,
             
             seed:int=None,
@@ -47,13 +50,15 @@ class SGLC_Cell(nn.Module):
             
             hidden_dim_GL (int):                    Hidden dimension for Graph Learner module
             attention_type (GraphLearnerAttention): Type of attention used for the Graph Learner module
-            num_layers (int):                       Number of message passing layers in the GAT or Transformer module for the Graph Learner module
+            num_GL_layers (int):                    Number of message passing layers in the GAT or Transformer module for the Graph Learner module
             num_heads (int):                        Number of heads for multi-head attention in the Graph Learner module
             dropout (float):                        Dropout probability applied in the attention layer of the Graph Learner module
             epsilon (float):                        Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
             
             hidden_dim_GGNN (int):                  Hidden dimension of the hidden state for Gated Graph Neural Networks module (only if `use_GRU` is True)
             num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
+            num_GGNN_layers (int):                  Number of Propagation modules in the Gated Graph Neural Networks module
+            act_GGNN (str|Callable):                The non-linear activation function to use inside the linear activation function in the Gated Graph Neural Networks module. If None use the default class value
             use_GRU_in_GGNN (bool):                 Use the GRU module instead of the standard propagator in the Gated Graph Neural Networks module
             
             seed (int):                             Sets the seed for the weights initializations. If None, don't use any seed
@@ -79,7 +84,7 @@ class SGLC_Cell(nn.Module):
             num_nodes   = num_nodes,
             num_heads   = num_heads,
             attention   = attention_type,
-            num_layers  = num_layers,
+            num_layers  = num_GL_layers,
             dropout     = dropout,
             epsilon     = epsilon,
             device      = device,
@@ -87,15 +92,20 @@ class SGLC_Cell(nn.Module):
             **kwargs_graph_learner
         )
         
+        GGNN_kwargs = {}
+        if act_GGNN is not None:
+            GGNN_kwargs['act'] = act_GGNN
         GGNN_input= (input_dim + hidden_dim_GGNN) if use_GRU else (input_dim)
         self.ggnn = GGNNLayer(
             input_dim   = GGNN_input,
             num_nodes   = num_nodes,
             output_dim  = input_dim,
             num_steps   = num_steps,
+            num_layers  = num_GGNN_layers,
             use_GRU     = use_GRU_in_GGNN,
             seed        = seed,
-            device      = device
+            device      = device,
+            **GGNN_kwargs
         )
         
         if self.use_GRU:
