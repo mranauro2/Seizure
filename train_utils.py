@@ -1,9 +1,9 @@
-from model.SGLCModel import SGLC_Classifier
+from model.SGLClassifier import SGLC_Classifier
 from model.loss.loss_classes import *
 from torch.utils.data import Subset
 
-from data.dataloader.dataloader import SeizureDataset, SeizureDatasetMethod
-from data.scaler.scaler import *
+from data.dataloader.SeizureDataset import SeizureDataset, SeizureDatasetMethod
+from data.scaler.Scaler import *
 
 from utils.constant.constants_main import *
 from utils.constant.constants_eeg import *
@@ -130,35 +130,48 @@ def generate_model(dataset:SeizureDataset, device:str):
     input_dim= feature_matrix.size(2)
             
     model= SGLC_Classifier(
-        num_classes     = NUM_CLASSES,
+        num_classes         = NUM_CLASSES,
         
-        num_cells       = NUM_CELLS,
-        input_dim       = input_dim,
-        num_nodes       = num_nodes,
+        num_cells           = NUM_CELLS,
+        input_dim           = input_dim,
+        num_nodes           = num_nodes,
         
-        graph_skip_conn = GRAPH_SKIP_CONN,
-        use_GRU         = USE_GRU,
-        hidden_per_step = HIDDEN_PER_STEP,
+        graph_skip_conn     = GRAPH_SKIP_CONN,
+        use_GRU             = USE_GRU,
+        hidden_per_step     = HIDDEN_PER_STEP,
         
-        hidden_dim_GL   = HIDDEN_DIM_GL,
-        attention_type  = ATTENTION_TYPE,
-        num_layers      = NUM_LAYERS,
-        num_heads       = NUM_HEADS,
-        dropout         = DROPOUT,
-        epsilon         = EPSILON,
+        hidden_dim_GL       = HIDDEN_DIM_GL,
+        attention_type      = ATTENTION_TYPE,
+        num_GL_layers       = NUM_GL_LAYERS,
+        num_GL_heads        = NUM_GL_HEADS,
+        dropout_GL          = GL_DROPOUT,
+        epsilon             = EPSILON,
         
-        hidden_dim_GGNN = HIDDEN_DIM_GGNN,
-        num_steps       = NUM_STEPS,
-        use_GRU_in_GGNN = USE_GRU_IN_GGNN,
+        hidden_dim_GGNN     = HIDDEN_DIM_GGNN,
+        num_steps           = NUM_STEPS,
+        num_GGNN_layers     = NUM_GGNN_LAYERS,
+        act_GGNN            = ACT_GGNN,
+        use_GRU_in_GGNN     = USE_GRU_IN_GGNN,
         
-        use_sigmoid     = USE_SIGMOID,
-        act             = ACT,
-        v2              = USE_GATv2,
-        concat          = CONCAT,
-        beta            = BETA,
+        transformer_type    = TRANSFORMER_TYPE,
+        num_transf_heads    = TRANSFORMER_NUM_HEADS,
+        num_encoder_layers  = NUM_ENCODER_LAYERS,
+        num_decoder_layers  = NUM_DECODER_LAYERS,
+        positional_encoding = POSITIONAL_ENCODING,
+        dim_feedforward     = DIM_FEEDFORWARD,
+        dropout_transf      = TRANSFORMER_DROPOUT,
+        act_transf          = TRANSFORMER_ACT,
         
-        seed            = RANDOM_SEED,
-        device          = device
+        num_inputs          = NUM_INPUTS,
+        
+        use_sigmoid         = USE_SIGMOID,
+        act                 = GL_ACT,
+        v2                  = USE_GATv2,
+        concat              = CONCAT,
+        beta                = BETA,
+        
+        seed                = RANDOM_SEED,
+        device              = device
     )
     
     return model
@@ -178,19 +191,35 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
     
     # load dataset
     dataset= SeizureDataset(
-        input_dir= input_dir,
-        files_record= files_record,
-        
-        time_step_size= TIME_STEP_SIZE,
-        max_seq_len= MAX_SEQ_LEN,
-        use_fft= USE_FFT,
-        
-        preprocess_data=preprocess_dir,
-        
-        method=method,
-        top_k= TOP_K,
-        lambda_value=lambda_value
+        input_dir       = input_dir,
+        files_record    = files_record,
+        time_step_size  = TIME_STEP_SIZE if (preprocess_dir is None) else None,
+        max_seq_len     = MAX_SEQ_LEN    if (preprocess_dir is None) else None,
+        use_fft         = USE_FFT        if (preprocess_dir is None) else None,
+        preprocess_data = preprocess_dir,
+        method          = method,
+        top_k           = TOP_K,
+        lambda_value    = lambda_value
     )
+    pos_samples_before = sum(dataset.targets_list())
+    neg_samples_before = len(dataset.targets_list()) - pos_samples_before
+    
+    dataset.apply_augmentations(AUGMENTATIONS)
+    pos_samples_after = sum(dataset.targets_list())
+    neg_samples_after = len(dataset.targets_list()) - pos_samples_after
+    
+    if (pos_samples_before != pos_samples_after):
+        logger.info("Positive samples are augmented from {:,} to {:,} [{:+.2f}%]".format(
+            pos_samples_before,
+            pos_samples_after,
+            100*(pos_samples_after - pos_samples_before) / pos_samples_before
+        ))
+    if (neg_samples_before != neg_samples_after):
+        logger.info("Negative samples are augmented from {:,} to {:,} [{:+.2f}%]".format(
+            neg_samples_before,
+            neg_samples_after,
+            100*(neg_samples_after - neg_samples_before) / neg_samples_before
+        ))
     
     return dataset
 
@@ -285,11 +314,11 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     # GRAPH LEARNER
     GL_tuple = [
         ("HIDDEN_DIM_GL", HIDDEN_DIM_GL),
-        ("NUM_HEADS", NUM_HEADS),
         ("ATTENTION_TYPE", ATTENTION_TYPE),
-        ("ACT", ACT),
-        ("NUM_LAYERS", NUM_LAYERS),
-        ("DROPOUT", DROPOUT),
+        ("NUM_GL_LAYERS", NUM_GL_LAYERS),
+        ("NUM_GL_HEADS", NUM_GL_HEADS),
+        ("GL_ACT", GL_ACT),
+        ("GL_DROPOUT", GL_DROPOUT),
         ("EPSILON", EPSILON),
         ("USE_SIGMOID", USE_SIGMOID),
         ("USE_GATv2", USE_GATv2),
@@ -302,9 +331,24 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     GGNN_tuple = [("HIDDEN_DIM_GGNN", HIDDEN_DIM_GGNN)] if USE_GRU else []
     GGNN_tuple.extend([
         ("NUM_STEPS", NUM_STEPS),
+        ("NUM_GGNN_LAYERS", NUM_GGNN_LAYERS),
+        ("ACT_GGNN", ACT_GGNN),
         ("USE_GRU_IN_GGNN", USE_GRU_IN_GGNN)
     ])
     GGNN_str = "GGNN info:\n{}".format(dict_to_str(GGNN_tuple))
+    
+    transformer_tuple = [
+        ("TRANSFORMER_TYPE", TRANSFORMER_TYPE),
+        ("TRANSFORMER_NUM_HEADS", TRANSFORMER_NUM_HEADS),
+        ("NUM_ENCODER_LAYERS", NUM_ENCODER_LAYERS),
+        ("NUM_DECODER_LAYERS", NUM_DECODER_LAYERS),
+        ("DIM_FEEDFORWARD", DIM_FEEDFORWARD),
+        ("TRANSFORMER_DROPOUT", TRANSFORMER_DROPOUT),
+        ("TRANSFORMER_ACT", TRANSFORMER_ACT),
+        ("POSITIONAL_ENCODING", POSITIONAL_ENCODING),
+        ("NUM_INPUTS", NUM_INPUTS)
+    ]
+    transformer_str = "Tansformer info:\n{}".format(dict_to_str(transformer_tuple))
     
     # LOSSES
     loss_tuple = [
@@ -315,6 +359,6 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     ]
     loss_str = "Losses info:\n{}".format(dict_to_str(loss_tuple))
     
-    total_str = "\n".join([dataset_str, model_str, GL_str, GGNN_str, loss_str])
+    total_str = "\n".join([dataset_str, model_str, GL_str, GGNN_str, transformer_str, loss_str])
         
     return total_str

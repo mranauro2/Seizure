@@ -33,19 +33,22 @@ MODEL_PARTIAL_PATH= os.path.join(MODEL_SAVE_FOLDER, MODEL_NAME)
 # INFO DATASET INITIALIZATION
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-TEST_PATIENT_IDS= ["chb02"]
-"""List of ids of patient to use for test"""
+TEST_PATIENT_IDS= None
+"""List of ids of patients to use for test"""
+
+VAL_PATIENT_IDS= ["chb10", "chb13", "chb14"]
+"""List of ids of patients to use fot valdidation"""
 
 EXCEPT_DATA= ["chb16"]
 """List of ids of patient which are not allowed to be in the dataset"""
 
-K_FOLD= 3
+K_FOLD= 0
 """Number of patients to use for each fold in the k-fold cross validation""" 
 
 PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""
 
-PERCENTAGE_BOTH_CLASS_IN_BATCH= 15
+PERCENTAGE_BOTH_CLASS_IN_BATCH= 10
 """Min percentage number of both class in a batch. If set to None does not use a sampler in the DataLoader"""
 
 BATCH_SIZE= 96
@@ -70,10 +73,10 @@ LEARNING_RATE= 1e-6
 USE_WEIGHT= True
 """If True, will be use weighted loss if available"""
 
-FOCAL_LOSS_APLHA= 0.99
+FOCAL_LOSS_APLHA= 0.75
 """Weighting factor in range [0, 1] to balance positive vs negative examples. High weight for positive class. If None are set based on the representativeness of the classes"""
 
-FOCAL_LOSS_GAMMA= 2.0
+FOCAL_LOSS_GAMMA= 1.0
 """Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples. Higher is more focus on hard examples"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #

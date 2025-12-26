@@ -1,5 +1,8 @@
 """Contains constant useful to the computation of EEG files"""
 from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
+from model.Transformer.PositionalEncoding import PositionalEncodingType
+from model.Transformer.TransformerType import TransformerType
+from data.dataloader.SeizureAugmentation import *
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # UTILS INFO
@@ -11,7 +14,7 @@ FREQUENCY_CHB_MIT= 256
 VERY_SMALL_NUMBER = 1e-12
 """Value used to avoid zero division"""
 
-INF = 1e20
+INF = 1e30
 """Value used to avoid `float('Inf')`"""
 
 USE_CUDA= True
@@ -36,6 +39,14 @@ Use the Fast Fourier Transform when obtain the slice from the file"""
 TOP_K= None
 """Used in :data:`data.dataloader.SeizureDataset` \\
 Maintain only the `top_k` higher value when compute the adjacency matrix"""
+
+seed = 1559
+classes_to_use = [True]
+AUGMENTATIONS = [
+    SwapChannels(labels=classes_to_use, seed=seed, p=0.0, channels_to_swap=[(0,1)])
+]
+"""Used in :data:`data.dataloader.SeizureDataset` \\
+Set the augmentation to use inside the dataset"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # DAMPING FACTOR FOR LOSS FUNCTIONS
@@ -70,9 +81,9 @@ USE_GRU= False
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Use GRU module in the :data:`model.SGLCell.SGLC_Cell` and hidden state in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
-HIDDEN_PER_STEP= True
+HIDDEN_PER_STEP= False
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
-Use a new hidden state for each time step (only if USE_GRU is True) in the :data:`model.ASGPFmodel.SGLC_Encoder` module"""
+Use a new hidden state for each time step (only if `USE_GRU` is True) in the :data:`model.ASGPFmodel.SGLC_Encoder` module"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # GRAPH LEARNER VALUES
@@ -81,35 +92,35 @@ HIDDEN_DIM_GL= 192
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Hidden dimension for the :data:`model.GraphLearner.GraphLearner` module"""
 
-ATTENTION_TYPE= GraphLearnerAttention.GRAPH_ATTENTION_LAYER
+ATTENTION_TYPE= GraphLearnerAttention.GAT
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Type of attention used in the :data:`model.GraphLearner.GraphLearner` module"""
 
-NUM_LAYERS= 3
+NUM_GL_LAYERS= 3
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Number of message passing layers in the GAT or Transformer module for the :data:`model.GraphLearner.GraphLearner` module"""
 
-NUM_HEADS= 8
+NUM_GL_HEADS= 8
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Number of heads for multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
-DROPOUT= 0.4
+GL_DROPOUT= 0.4
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Dropout probability applied in the attention layer for the :data:`model.GraphLearner.GraphLearner` module"""
 
-EPSILON= None
+EPSILON= 1e-18
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Threshold for deleting weak connections in the learned graph for the :data:`model.GraphLearner.GraphLearner` module. If None, no deleting is applied"""
 
-ACT= 'relu'
+GL_ACT= 'relu'
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Non-linear activation function to use in the :data:`model.GraphLearner.GraphLearner` module"""
 
-USE_SIGMOID= False
+USE_SIGMOID= True
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Use the sigmoid as activation function after the computation of the attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
-USE_GATv2= False
+USE_GATv2= True
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
@@ -122,15 +133,62 @@ BETA= False
 If True will combine aggregation and skip information in the :data:`model.GraphLearner.GraphLearner` module"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# TRANSFORMER VALUES
+
+TRANSFORMER_TYPE= None # TransformerType.TRANSFORMER_ENCODER
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Type of transformer used in the :data:`model.Transformer.Transformer` module"""
+
+TRANSFORMER_NUM_HEADS= None # 8
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Number of heads for multi-head attention in the :data:`model.Transformer.Transformer` module"""
+
+NUM_ENCODER_LAYERS= None # 3
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Number of sub-encoder layers in the encoder in the :data:`model.Transformer.Transformer` module"""
+
+NUM_DECODER_LAYERS= None # 3
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Number of sub-decoder layers in the decoder in the :data:`model.Transformer.Transformer` module"""
+
+POSITIONAL_ENCODING= None # PositionalEncodingType.SINUSOIDAL
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Type of positional encoder to use in the :data:`model.Transformer.Transformer` module. It can be None if don't use any"""
+
+DIM_FEEDFORWARD= None # 2048
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Dimension of the feedforward network model in the :data:`model.Transformer.Transformer` module"""
+
+TRANSFORMER_DROPOUT= None # 0.3
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Dropout probability applied in the :data:`model.Transformer.Transformer` module"""
+
+TRANSFORMER_ACT= None
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Non-linear activation function to use in the :data:`model.Transformer.Transformer` module"""
+
+NUM_INPUTS= MAX_SEQ_LEN if (TRANSFORMER_TYPE is not None) else None
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Number of inputs passed during the forward method in the :data:`model.Transformer.Transformer` module"""
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # GATED GRAPH NEURAL NETWORKS VALUES
 
-HIDDEN_DIM_GGNN= 192
+HIDDEN_DIM_GGNN= 0
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Hidden dimension in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module. Only if `USE_GRU` is True"""
 
 NUM_STEPS= 6
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
 Number of propagation steps in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
+NUM_GGNN_LAYERS= 1
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Number of propagation modules in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
+ACT_GGNN= None
+"""Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
+Non-linear activation function to use inside the linear activation in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module. If None use the default class value"""
 
 USE_GRU_IN_GGNN= False
 """Used in :data:`model.ASGPFmodel.SGLC_Classifier` \\
