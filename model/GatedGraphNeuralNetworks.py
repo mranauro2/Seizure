@@ -129,8 +129,8 @@ class GGNNLayer(nn.Module):
                 self.propagators.append(
                     Propogator(input_dim, device=device)
                 )
-                
-        self.fc = nn.Sequential(nn.Linear(input_dim, output_dim*4, device=device), act, nn.Linear(input_dim*4, output_dim, device=device))
+        
+        self.fc = nn.Sequential(nn.Linear(input_dim, output_dim*4, device=device), act, nn.Linear(output_dim*4, output_dim, device=device))
         
         if (seed is not None):
             torch.manual_seed(seed)
