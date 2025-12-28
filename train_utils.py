@@ -353,11 +353,11 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     # LOSSES
     loss_tuple = [
         ("LEARNING_RATE", LEARNING_RATE),
-        ("DAMP_SMOOTH", DAMP_SMOOTH),
         ("DAMP_DEGREE", DAMP_DEGREE),
+        ("DAMP_SMOOTH", DAMP_SMOOTH),
         ("DAMP_SPARSITY", DAMP_SPARSITY)
     ]
-    loss_str = "Losses info:\n{}".format(dict_to_str(loss_tuple))
+    loss_str = "Losses info:\n{}".format(dict_to_str(loss_tuple, print_zero=True))
     
     total_str = "\n".join([dataset_str, model_str, GL_str, GGNN_str, transformer_str, loss_str])
         
