@@ -488,9 +488,9 @@ def main_test_set():
         train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
         LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
 
-    train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
-    val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True)
-    test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True) if (test_set is not None) else None
+    train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True)
+    test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True) if (test_set is not None) else None
     
     # print on screen some informations
     names= ["test", "train", "validation"]
