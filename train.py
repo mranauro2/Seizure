@@ -258,9 +258,8 @@ def train(
                 array_train[0:START_EPOCH, index], array_val[0:START_EPOCH, index], _ = Metrics.load(position)
     
     # checkpoint init
-    higher_is_better= False
-    early_stop_start= (START_USE_EARLY_STOP-START_EPOCH) if (START_USE_EARLY_STOP-START_EPOCH)>0 else 0
-    checkpoint_observer= CheckPoint(best_k=BEST_K_MODELS, each_spacing=MAX_NUM_EPOCHS, total_epochs=num_epochs, higher_is_better=higher_is_better, early_stop_patience=EARLY_STOP_PATIENCE, early_stop_start=early_stop_start)
+    higher_is_better= not( dummy_metrics[0][0].lower().startswith("loss") )
+    checkpoint_observer= CheckPoint(best_k=BEST_K_MODELS, each_spacing=MAX_NUM_EPOCHS, total_epochs=num_epochs, higher_is_better=higher_is_better, early_stop_patience=EARLY_STOP_PATIENCE, early_stop_start=START_USE_EARLY_STOP)
     checkpoint_observer.margin= PERCENTAGE_MARGIN
     
     if verbose:
@@ -273,8 +272,11 @@ def train(
             "\n"+
             "\tearly stop       : {}".format(EARLY_STOP_PATIENCE) +
             "\n"+
-            "\tearly_stop_start : {}".format(early_stop_start)
+            "\tearly stop start : {}".format(START_USE_EARLY_STOP)
         )
+    
+    for index in range(START_EPOCH):
+        checkpoint_observer.update_saving(array_val[index, 0])
     
     # real training
     interrupt = False
