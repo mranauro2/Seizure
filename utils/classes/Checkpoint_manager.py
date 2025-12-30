@@ -19,6 +19,7 @@ class CheckPoint():
             higher_is_better (bool):    If True, higher metric values are better (e.g., accuracy). If False, lower metric values are better (e.g., loss)
             early_stop_patience (int):  If not None, stop the model early to prevent overfitting
             early_stop_start (int):     If not None and `early_stop_patience` not None, start the early stop scope after a certain number of epochs
+            print_warning (bool):       Show on screen warning message during the creation of the object
         
         Notes:
             The best K model tracking uses a margin to determine significant improvements.
@@ -67,7 +68,7 @@ class CheckPoint():
             raise ValueError(f"Margin must be between 0 and 1, got {value}")
         self._margin = value
     
-    def _check_best(self, metric: float = None) -> bool:
+    def _check_best(self, metric:float) -> bool:
         """
         Check if the current metric is better than the worst of the best K metrics
             :param metric (float): Current metric value to evaluate.
@@ -99,7 +100,7 @@ class CheckPoint():
         """Check if the current epoch is a multiple of the spacing."""
         return (self.each_spacing is not None) and (self.epochs_count != 0) and (self.each_spacing != 0) and (self.epochs_count % self.each_spacing == 0)
     
-    def _update_early_stop(self, metric: float = None) -> None:
+    def _update_early_stop(self, metric:float) -> None:
         """Update early stopping counter based on whether metric improved."""
         if (self.early_stop_patience is None) or (metric is None):
             return
@@ -139,7 +140,7 @@ class CheckPoint():
             return False
         return (self.patience_counter > self.early_stop_patience)
     
-    def update_saving(self, metric: float = None, filepath: str|list[str] = None) -> None:
+    def update_saving(self, metric:float, filepath:str|list[str]=None) -> None:
         """
         Update the best K metrics if the current metric qualifies. Call this after checking if saving is needed and after saving the model.
         
@@ -147,17 +148,19 @@ class CheckPoint():
             metric (float):                     Current metric value to save.
             filepath (Union[str, List[str]]):   Path or list of paths where checkpoint files were saved. Use list when saving multiple files (model, optimizer, config, etc.).
         """
-        if self._check_best(metric) and (filepath is not None):
+        if self._check_best(metric):
+            if (filepath is not None):
+                paths_to_save = [filepath] if isinstance(filepath, str) else filepath
+                
+                for path in paths_to_save:
+                    self._all_saved_paths.add(path)
+                    if self._check_each():
+                        self._periodic_paths.add(path)
+            else:
+                paths_to_save = None
+            
             worst_idx = np.argmin(self.best_k) if self.higher_is_better else np.argmax(self.best_k)
-            
-            paths_to_save = [filepath] if isinstance(filepath, str) else filepath
-            
-            for path in paths_to_save:
-                self._all_saved_paths.add(path)
-                if self._check_each():
-                    self._periodic_paths.add(path)
-            
-            self.best_k[worst_idx] = metric
+            self.best_k[worst_idx] = metric    
             self.best_k_paths[worst_idx] = paths_to_save
     
     def delete_obsolete_checkpoints(self, auto_delete:bool=False) -> None|list:
