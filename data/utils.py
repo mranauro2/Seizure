@@ -2,6 +2,7 @@ import warnings
 import itertools
 import numpy as np
 
+from typing import Any
 from scipy.fftpack import fft
 from scipy.sparse import linalg
 from scipy.sparse.csgraph import laplacian
@@ -496,7 +497,7 @@ def k_fold_split_patient_data(
     
     return k_fold
 
-def split_patient_data_specific(patient_data:dict[str,list[int]], patient_ids:list[str]) -> tuple[dict[str, list[int]], dict[str,list[int]]]:
+def split_patient_data_specific(patient_data:dict[str,Any], patient_ids:list[str]) -> tuple[dict[str,Any], dict[str,Any]]:
     """
     This function removes a subset of patients from the original dictionary and returns two dictionaries:
       - one containing the extracted patient entries
@@ -504,11 +505,11 @@ def split_patient_data_specific(patient_data:dict[str,list[int]], patient_ids:li
     It performs a safe copy of the input dictionary so the original data is not modified
 
     Args:
-        patient_data (dict[str,list[int]]): Dictionary with patient_id as key and list of labels of integers as value
-        patient_ids (list[str]):            List of keys to extract from `patient_data`
+        patient_data (dict[str,Any]): Dictionary with patient_id as key and list of labels of integers as value
+        patient_ids (list[str]):      List of keys to extract from `patient_data`
 
     Returns:
-        tuple (dict[str, list[int]], dict[str,list[int]]): 
+        tuple (dict[str,Any], dict[str,Any]): 
             - `remaining_data`: contains all entries from `patient_data` except those whose IDs appear in `patient_ids`
             - `extracted_data`: contains only the entries whose IDs were listed in `patient_ids`
     
