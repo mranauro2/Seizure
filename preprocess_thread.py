@@ -1,12 +1,14 @@
+from typing import Callable
 from tqdm.auto import tqdm
-import numpy as np
-import argparse
-import os
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
+import numpy as np
+import argparse
 import tempfile
 import shutil
+import os
 
 from data.utils import compute_slice_matrix
 
@@ -109,8 +111,43 @@ def is_overlap(interval_1:list[int, int], interval_2:list[int, int], full_overla
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def process_segment(args):
-    """Process a single segment - designed to run in parallel"""
-    info_dict, index, seq_len, z_fill, save_dir, data_dir, use_fft, overwrite_segments, full_overlap, patient_id = args
+    """
+    Process a single EEG segment by extracting it from a file and determining seizure overlap.\\
+    This function is designed to be called in parallel. It processes one segment of EEG data, optionally saves it,
+    and generates an output string indicating whether the segment overlaps with a seizure event
+    
+    Args:
+        tuple:
+            - info_dict (dict):\\
+                Dictionary with keys 'file_name', 'duration', 'num_seizure', 'start_seizure', 'finish_seizure'
+            - index (int):\\
+                Segment index number (0-based)
+            - seq_len (int):\\
+                Length of each segment in seconds
+            - z_fill (int):\\
+                Number of digits for zero-padding the segment index in filenames
+            - save_dir (str|None):\\
+                Directory where segments should be saved. If None, segments are not saved to disk
+            - data_dir (str):\\
+                Root directory containing the source data files
+            - use_fft (bool):\\
+                Whether to apply Fast Fourier Transform during slice computation
+            - overwrite_segments (bool):\\
+                If True, overwrite existing segment files; if False, skip existing files
+            - full_overlap (bool):\\
+                If True, segment must be completely inside seizure interval to be labeled as overlap
+            - patient_id (str):\\
+                Identifier for the patient (typically derived from summary filename)
+        
+    :returns out (tuple):
+        - str: (output_string) CSV-formatted string with segment information. Format varies <br>
+            - If save_dir is provided: "patient_id, absolute_path_to_saved_file, overlap_flag" <br>
+            - If save_dir is None: "patient_id, source_file_path, zero_padded_index, overlap_flag"
+            
+        - bool: (overlap) True if the segment overlaps with any seizure event
+        - bool: (skipped) True if the segment file already existed and was skipped
+    """
+    info_dict, index, seq_len, z_fill, save_dir, data_dir, use_fft, overwrite_segments, full_overlap, patient_id, use_previous_segment = args
     
     name = os.path.abspath(info_dict['file_name'])
     curr_start = index * seq_len
@@ -139,14 +176,40 @@ def process_segment(args):
             os.makedirs(os.path.dirname(new_path), exist_ok=True)
             np.save(new_path, eeg_clip)
         
-        output_string = f"{patient_id}, {new_path}, {int(overlap)}\n"
+        if use_previous_segment:
+            prev_indexed_filename = f"{name_without_ext}_{str(index-1).zfill(z_fill)}{extention}"
+            prev_path = os.path.abspath(os.path.join(output_dir, prev_indexed_filename))
+            output_string = f"{patient_id}, {prev_path}, {new_path}\n"
+        else:
+            output_string = f"{patient_id}, {new_path}, {int(overlap)}\n"
+    
+    # Do not save segment
     else:
-        output_string = f"{patient_id}, {name}, {str(index).zfill(z_fill)}, {int(overlap)}\n"
+        if use_previous_segment:
+            output_string = f"{patient_id}, {name}, {str(index-1).zfill(z_fill)}, {name}, {str(index).zfill(z_fill)}\n"
+        else:
+            output_string = f"{patient_id}, {name}, {str(index).zfill(z_fill)}, {int(overlap)}\n"
     
     return output_string, overlap, skipped
 
-def process_batch_with_file(batch_tasks, temp_file_path, progress_callback=None):
-    """Process a batch of tasks and write results to a temporary file"""
+def process_batch_with_file(batch_tasks:list, temp_file_path:str, progress_callback:Callable=None) -> list[tuple[bool,bool]]:
+    """
+    Process a batch of segment tasks and write results to a temporary file.
+    
+    This function processes multiple segments sequentially within a single worker thread,
+    writing each result immediately to a temporary file. This approach reduces memory usage
+    and allows for incremental progress tracking.
+    
+    Args:
+        batch_tasks (list):           List of task tuples, where each tuple contains the arguments for `process_segment()` as described in that function's documentation
+        temp_file_path (str):         Absolute path to the temporary file where results should be written. Each line contains the output from one processed segment
+        progress_callback (Callable): Function to call after each segment is processed, typically used to update a progress bar
+    
+    Returns:
+        list: List of tuples, one per processed segment, where each tuple contains:
+            - overlap (bool): True if the segment overlaps with a seizure event
+            - skipped (bool): True if the segment file already existed and was skipped
+    """
     results = []
     
     with open(temp_file_path, 'w') as f:
@@ -163,23 +226,24 @@ def process_batch_with_file(batch_tasks, temp_file_path, progress_callback=None)
 # MAIN PROCESSING FUNCTION
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def main(summary_dir:str, data_dir:str, file_name:str, save_dir:str, seq_len:int, z_fill:int, check_file:bool=True, use_fft:bool=True, overwrite_segments:bool=False, full_overlap:bool=False, max_workers:int=4, verbose:bool=True) -> None:
+def main(summary_dir:str, data_dir:str, file_name:str, save_dir:str, seq_len:int, z_fill:int, check_file:bool=True, use_fft:bool=True, overwrite_segments:bool=False, full_overlap:bool=False, max_workers:int=4, use_previous_segment:bool=False, verbose:bool=True) -> None:
     """
     Process CHB-MIT dataset and generate segmented window labels using parallel processing.
     
     Args:
-        summary_dir (str):          Root directory containing CHB-MIT csv summary files
-        data_dir (str):             Root directory containing all CHB-MIT available file
-        save_dir (str):             Root directory where save the preprocessed data
-        file_name (str):            Output file path where segmentation results will be saved
-        seq_len (int):              Length of each segment window in seconds
-        z_fill (int):               Number of digits for zero-padding segment indices
-        check_file (bool):          If True stop the execution when the file already exists
-        use_fft (bool):             Use the Fast Fourier Transform when obtain the slice
-        overwrite_segments (bool):  If True, overwrite existing segment files
-        full_overlap (bool):        Used in `is_overlap`: if True the overlap must be complete. The first interval must be inside the second interval
-        max_workers (int):          Number of parallel workers (threads)
-        verbose (bool):             Print information at the end of the execution
+        summary_dir (str):              Root directory containing CHB-MIT csv summary files
+        data_dir (str):                 Root directory containing all CHB-MIT available file
+        save_dir (str):                 Root directory where save the preprocessed data
+        file_name (str):                Output file path where segmentation results will be saved
+        seq_len (int):                  Length of each segment window in seconds
+        z_fill (int):                   Number of digits for zero-padding segment indices
+        check_file (bool):              If True stop the execution when the file already exists
+        use_fft (bool):                 Use the Fast Fourier Transform when obtain the slice
+        overwrite_segments (bool):      If True, overwrite existing segment files
+        full_overlap (bool):            Used in `is_overlap`: if True the overlap must be complete. The first interval must be inside the second interval
+        max_workers (int):              Number of parallel workers (threads)
+        use_previous_segment (bool):    If True, output includes previous segment info instead of overlap flag
+        verbose (bool):                 Print information at the end of the execution
     """
     # stop the execution or delete the output file if it exists
     if os.path.exists(file_name):
@@ -219,8 +283,9 @@ def main(summary_dir:str, data_dir:str, file_name:str, save_dir:str, seq_len:int
         
         for info_dict in info_list:
             num_segments = int(info_dict['duration'] // seq_len)
-            for index in range(num_segments):
-                tasks.append((info_dict, index, seq_len, z_fill, save_dir, data_dir, use_fft, overwrite_segments, full_overlap, patient_id))
+            start_index = 1 if use_previous_segment else 0
+            for index in range(start_index, num_segments):
+                tasks.append((info_dict, index, seq_len, z_fill, save_dir, data_dir, use_fft, overwrite_segments, full_overlap, patient_id, use_previous_segment))
 
     # Create temporary directory for worker files
     temp_dir = tempfile.mkdtemp()
@@ -286,19 +351,20 @@ def main(summary_dir:str, data_dir:str, file_name:str, save_dir:str, seq_len:int
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Segment CHB-MIT dataset into fixed-length windows and label seizure activity", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
-    parser.add_argument("summary_dir",      type=str,                                 help="Root directory containing CHB-MIT csv summary files")
-    parser.add_argument("data_dir",         type=str,                                 help="Root directory containing all CHB-MIT available file")
-    parser.add_argument("file_name",        type=str,                                 help="Output file path for segmentation results")
+    parser.add_argument("summary_dir",           type=str,                                 help="Root directory containing CHB-MIT csv summary files")
+    parser.add_argument("data_dir",              type=str,                                 help="Root directory containing all CHB-MIT available file")
+    parser.add_argument("file_name",             type=str,                                 help="Output file path for segmentation results")
     
-    parser.add_argument("--save_dir",       type=str,            default=None,        help="Root directory where save the preprocessed data")
-    parser.add_argument("--use_fft",        action='store_true', default=False,       help="Use the Fast Fourier Transform when obtain the slice from the file. Used only if --save_dir is not None")
-    parser.add_argument("--overwrite",      action='store_true', default=False,       help="Overwrite existing segment files. If not set, existing files will be skipped")
-    parser.add_argument("--partial_overlap",action='store_true', default=False,       help="If False the overlap must be complete. The interval of the segmented data must be completely inside the seizure event to be labeled as seizure")
-    parser.add_argument("--seq_len",        type=int,            default=4,           help="Length of each segment window in seconds")
-    parser.add_argument("--z_fill",         type=int,            default=3,           help="Number of digits for zero-padding segment indices")
-    parser.add_argument("--delete",         action='store_true', default=False,       help="Delete the output file if already exists")
-    parser.add_argument("--no_verbose",     action='store_true', default=False,       help="Disable printing information at the end of the execution")
-    parser.add_argument("--workers",        type=int,            default=4,           help="Number of parallel workers")
+    parser.add_argument("--save_dir",            type=str,            default=None,        help="Root directory where save the preprocessed data")
+    parser.add_argument("--use_fft",             action='store_true', default=False,       help="Use the Fast Fourier Transform when obtain the slice from the file. Used only if --save_dir is not None")
+    parser.add_argument("--overwrite",           action='store_true', default=False,       help="Overwrite existing segment files. If not set, existing files will be skipped")
+    parser.add_argument("--partial_overlap",     action='store_true', default=False,       help="If False the overlap must be complete. The interval of the segmented data must be completely inside the seizure event to be labeled as seizure")
+    parser.add_argument("--use_previous_segment",action='store_true', default=False,       help="Output previous segment info instead of overlap flag")
+    parser.add_argument("--seq_len",             type=int,            default=4,           help="Length of each segment window in seconds")
+    parser.add_argument("--z_fill",              type=int,            default=3,           help="Number of digits for zero-padding segment indices")
+    parser.add_argument("--delete",              action='store_true', default=False,       help="Delete the output file if already exists")
+    parser.add_argument("--no_verbose",          action='store_true', default=False,       help="Disable printing information at the end of the execution")
+    parser.add_argument("--workers",             type=int,            default=4,           help="Number of parallel workers")
     
     args = parser.parse_args()
     
@@ -321,5 +387,6 @@ if __name__ == "__main__":
         overwrite_segments=args.overwrite,
         full_overlap=not(args.partial_overlap),
         max_workers=args.workers,
+        use_previous_segment=args.use_previous_segment,
         verbose=not(args.no_verbose)
     )
