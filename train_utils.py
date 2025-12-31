@@ -2,7 +2,7 @@ from model.SGLClassifier import SGLC_Classifier
 from model.loss.loss_classes import *
 from torch.utils.data import Subset
 
-from data.dataloader.SeizureDataset import SeizureDataset, SeizureDatasetMethod
+from data.dataloader.SeizureDataset import SeizureDatasetDetection, SeizureDatasetMethod
 from data.utils import split_patient_data_specific
 from data.scaler.Scaler import *
 
@@ -124,7 +124,7 @@ def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scal
     
     return scaler
 
-def generate_model(dataset:SeizureDataset, device:str):
+def generate_model(dataset:SeizureDatasetDetection, device:str):
     """Generate the model using the constant in the constant files"""
     feature_matrix, _, _ = dataset[0]
     num_nodes= feature_matrix.size(1)
@@ -191,7 +191,7 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
     logger.info(string)
     
     # load dataset
-    dataset= SeizureDataset(
+    dataset= SeizureDatasetDetection(
         input_dir       = input_dir,
         files_record    = files_record,
         time_step_size  = TIME_STEP_SIZE if (preprocess_dir is None) else None,
@@ -205,7 +205,7 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
     
     return dataset
 
-def augment_dataset_train(logger:Logger, dataset:SeizureDataset, train_dict:dict[str, list[int]], remove:bool=False):
+def augment_dataset_train(logger:Logger, dataset:SeizureDatasetDetection, train_dict:dict[str, list[int]], remove:bool=False):
     """Augment the dataset or remove the augmentation applied"""
     pos_samples_before , neg_samples_before = pos_neg_samples(train_dict)
     

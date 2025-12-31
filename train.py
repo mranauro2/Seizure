@@ -14,7 +14,7 @@ from data.scaler.Scaler import *
 from data.utils import *
 from train_utils import *
 
-from data.dataloader.SeizureDataset import SeizureDataset
+from data.dataloader.SeizureDataset import SeizureDatasetDetection
 from data.dataloader.SeizureSampler import SeizureSampler
 
 from model.SGLClassifier import SGLC_Classifier
@@ -348,7 +348,7 @@ def main_k_fold():
     """Main to evaluate the performance with k-fold cross validation"""
     # take input from command line and print some informations
     loss_type, input_dir, files_record, method, lambda_value, scaler_type, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
+    dataset:SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
     
     # removing unwanted patients
     remaining_data = dataset.targets_dict()
@@ -465,7 +465,7 @@ def main_test_set():
     """Main to evaluate the patients in the test"""
     # take input from command line and print some informations
     loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
+    dataset:SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
     
     # splitting data, augment train set and removing unwanted patients
     remaining_data = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)[0] if (EXCEPT_DATA is not None) else dataset.targets_dict()
