@@ -9,6 +9,7 @@ from model.Transformer.Transformer import Transformer, TransformerType, Position
 import os
 import warnings
 from enum import Enum
+from copy import deepcopy
 from types import NoneType
 from typing import Callable
 
@@ -26,6 +27,8 @@ class SGLC_Classifier(nn.Module):
             graph_skip_conn:float=0.3,
             use_GRU:bool=False,
             hidden_per_step:bool=True,
+            pretrain_with_decoder:bool=False,
+            new_pretrain_hidden:bool=False,
             
             hidden_dim_GL:int=100,
             attention_type:GraphLearnerAttention=GraphLearnerAttention.GRAPH_ATTENTION_LAYER,
@@ -68,6 +71,8 @@ class SGLC_Classifier(nn.Module):
             graph_skip_conn (float):                        Skip connection weight for adjacency updates
             use_GRU (bool):                                 Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
             hidden_per_step (bool):                         Use a new hidden state for each time step (only if `use_GRU` is True)
+            pretrain_with_decoder (bool):                   Pretrain the model using an encoder-decoder architecture. The output will be the next predicion instead of a classification
+            new_pretrain_hidden (bool):                     Use a new hidden state instead of the encoder hidden state (only if `use_GRU` and `pretrain_with_decoder` are True)
             
             hidden_dim_GL (int):                            Hidden dimension for Graph Learner module
             attention_type (GraphLearnerAttention):         Type of attention used for the Graph Learner module
@@ -102,9 +107,19 @@ class SGLC_Classifier(nn.Module):
         self.params.pop('self')
         self.params.pop('__class__')
         
+        if (pretrain_with_decoder) and (transformer_type is not None):
+            raise ValueError("'pretrain_with_decoder' and 'transformer_type' are True but in conflict. Choose one")            
+        if (new_pretrain_hidden):
+            if not(pretrain_with_decoder):
+                warnings.warn("'new_pretrain_hidden' parameter is ignored because 'pretrain_with_decoder' is False")
+            if (pretrain_with_decoder) and not(use_GRU):
+                warnings.warn("'new_pretrain_hidden' parameter is ignored because 'use_GRU' is False")
+
+        self.device= device
         self.use_GRU= use_GRU
         self.hidden_per_step= hidden_per_step
-        self.device= device
+        self.new_pretrain_hidden= new_pretrain_hidden
+        self.pretrain_with_decoder= pretrain_with_decoder
         self.encoder = SGLC_Encoder(
             num_cells       = num_cells,
             input_dim       = input_dim,
@@ -131,8 +146,8 @@ class SGLC_Classifier(nn.Module):
             device          = device,
             **kwargs
         )
-
-
+        
+        
         keys_transformer = ["num_inputs"]
         kwargs_transformer = {key:value for key,value in kwargs.items() if (key in keys_transformer) and (value is not None)}
         transformer_params = (
@@ -145,7 +160,14 @@ class SGLC_Classifier(nn.Module):
             (act_transf          is not None)
         )
         
-        if (transformer_type is None):
+        if (pretrain_with_decoder):
+            self.decoder = deepcopy(self.encoder)
+            if ( transformer_params or ( len(kwargs_transformer)!=0 ) ):
+                others_msg = ". Some of them are : '{}'".format("', '".join(kwargs_transformer.keys())) if (len(kwargs_transformer)!=0) else ""
+                msg = "'transformer_type' is None but some parameters regarding to it have been passed{}".format(others_msg)
+                raise ValueError(msg)
+        
+        elif (transformer_type is None):
             if ( transformer_params or ( len(kwargs_transformer)!=0 ) ):
                 others_msg = ". Some of them are : '{}'".format("', '".join(kwargs_transformer.keys())) if (len(kwargs_transformer)!=0) else ""
                 msg = "'transformer_type' is None and some parameters regarding to it have been ignored{}".format(others_msg)
@@ -169,55 +191,80 @@ class SGLC_Classifier(nn.Module):
                 **kwargs_transformer,
             )
         
-        self.fc= nn.Sequential(
-            nn.Linear(num_nodes*input_dim, num_classes*4, device=device),
-            nn.LeakyReLU(negative_slope=0.2),
-            nn.Linear(num_classes*4, num_classes, device=device),
-        )
-        
-        if (seed is not None):
-            torch.manual_seed(seed)
-        for param in self.fc.parameters():
-            if param.dim() > 1:
-                nn.init.xavier_uniform_(param)
-    
-    def forward(self, input_seq:Tensor, supports:Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        """
-        Use the SGLCEncoder to calculate the new representations of the feature/node matrix and the adjacency matrix using a hidden state initialize at all zeros
-        
-        Args:
-            input_seq (Tensor):     Input features matrix with size (batch_size, sequential_length, num_nodes, input_dim)
-            supports (Tensor):      Adjacency matrix with size (batch_size, num_nodes, num_nodes)
+        if not(self.pretrain_with_decoder):
+            self.fc= nn.Sequential(
+                nn.Linear(num_nodes*input_dim, num_classes*4, device=device),
+                nn.LeakyReLU(negative_slope=0.2),
+                nn.Linear(num_classes*4, num_classes, device=device),
+            )
             
-        Returns:
-            tuple(Tensor, Tensor, Tensor): A tuple containing:
-                - result: Class probability distribution with shape (batch_size, num_classes)
-                - input_seq: Encoded feature sequence with shape (batch_size, seq_length, num_nodes, input_dim)
-                - supports: Learned adjacency matrix with shape (batch_size, num_nodes, num_nodes)
-        """
+            if (seed is not None):
+                torch.manual_seed(seed)
+            for param in self.fc.parameters():
+                if param.dim() > 1:
+                    nn.init.xavier_uniform_(param)
+    
+    def _forward_encoder(self, input_seq:Tensor, supports:Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        """Process input according to the encoder using the `self.forward` parameters"""
         # Transpose: (batch_size, seq_length, num_nodes, input_dim) --> (seq_length, batch_size, num_nodes, input_dim)
         input_seq = torch.transpose(input_seq, dim0=0, dim1=1)
         
-        ## input processing
         # case GRU and hidden per step
         if self.use_GRU:
             if self.hidden_per_step:
                 init_hidden_state = torch.zeros_like( self.encoder.hidden_state_empty(batch_size=input_seq.size(1)) )
+                init_hidden_state = init_hidden_state.to(device=self.device)
+                input_seq, supports, hidden_state = self.encoder(input_seq, supports, init_hidden_state)
         
         # case GRU and single hidden
             else:
                 init_hidden_state = torch.zeros_like( self.encoder.hidden_state_empty(batch_size=input_seq.size(1))[0] )
-            init_hidden_state = init_hidden_state.to(device=self.device)
-            input_seq, supports, _ = self.encoder(input_seq, supports, init_hidden_state)
+                init_hidden_state = init_hidden_state.to(device=self.device)
+                input_seq, supports, hidden_state = self.encoder(input_seq, supports, init_hidden_state)
         
         # case no GRU
         else:
             input_seq, supports = self.encoder(input_seq, supports)
+            hidden_state = None
         
-        ## result
+        # Transpose: (seq_length, batch_size, num_nodes, input_dim) --> (batch_size, seq_length, num_nodes, input_dim)
+        input_seq = torch.transpose(input_seq, dim0=0, dim1=1)
+        
+        return input_seq, supports, hidden_state
+    
+    def _forward_decoder(self, input_seq:Tensor, supports:Tensor, hidden_state:Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        """Process input according to the decoder using the `self.forward` parameters and hidden_state"""        
+        # Transpose: (batch_size, seq_length, num_nodes, input_dim) --> (seq_length, batch_size, num_nodes, input_dim)
+        input_seq = torch.transpose(input_seq, dim0=0, dim1=1)
+        
+        # case GRU and hidden per step
+        if self.use_GRU:
+            if self.hidden_per_step:
+                init_hidden_state = hidden_state if not(self.new_pretrain_hidden) else torch.zeros_like( self.decoder.hidden_state_empty(batch_size=input_seq.size(1)) )
+                init_hidden_state = init_hidden_state.to(device=self.device)
+                input_seq, supports, hidden_state = self.decoder(input_seq, supports, init_hidden_state)
+        
+        # case GRU and single hidden
+            else:
+                init_hidden_state = hidden_state if not(self.new_pretrain_hidden) else torch.zeros_like( self.decoder.hidden_state_empty(batch_size=input_seq.size(1))[0] )
+                init_hidden_state = init_hidden_state.to(device=self.device)
+                input_seq, supports, hidden_state = self.decoder(input_seq, supports, init_hidden_state)
+        
+        # case no GRU
+        else:
+            input_seq, supports = self.decoder(input_seq, supports)
+            hidden_state = None
+        
+        # Transpose: (seq_length, batch_size, num_nodes, input_dim) --> (batch_size, seq_length, num_nodes, input_dim)
+        input_seq = torch.transpose(input_seq, dim0=0, dim1=1)
+        
+        return input_seq, supports, hidden_state
+    
+    def _forward_result(self, input_seq:Tensor) -> Tensor:
+        """Process input according to the transformer and last fully connected layer using the `self.forward` parameters"""
         if (self.transf is not None):
             input_clone = input_seq.clone()
-            input_clone = torch.transpose(input_clone, dim0=0, dim1=1)
+            # Reshape: (seq_length, batch_size, num_nodes, input_dim) --> (batch_size, seq_length*num_nodes, input_dim)
             input_clone = input_clone.reshape(input_clone.size(0), -1, input_clone.size(-1))
             last_feature = self.transf(input_clone)
         else:
@@ -225,11 +272,37 @@ class SGLC_Classifier(nn.Module):
         
         features_mean= last_feature.reshape(last_feature.size(0), -1)
         result = self.fc(features_mean)
-
-        # Transpose: (seq_length, batch_size, num_nodes, input_dim) --> (batch_size, seq_length, num_nodes, input_dim)
-        input_seq = torch.transpose(input_seq, dim0=0, dim1=1)
         
-        return result, input_seq, supports
+        return result
+    
+    def forward(self, input_seq:Tensor, supports:Tensor) -> Tensor|tuple[Tensor, Tensor, Tensor]:
+        """
+        Use the SGLCEncoder to calculate the new representations of the feature/node matrix and the adjacency matrix using a hidden state initialize at all zeros
+        
+        Args:
+            input_seq (Tensor):     Input features matrix with size (batch_size, sequential_length, num_nodes, input_dim)
+            supports (Tensor):      Adjacency matrix with size (batch_size, num_nodes, num_nodes)
+            
+        :returns out (Tensor | tuple[Tensor, Tensor, Tensor]):
+        - Tensor: if `pretrain_with_decoder` is True
+            - input_seq: Updated Tensor after encoder-decoder structure with shape (batch_size, seq_length, num_nodes, input_dim)
+        - tuple[Tensor, Tensor, Tensor]: if `pretrain_with_decoder` is False
+            - result:    Class probability distribution with shape (batch_size, num_classes)
+            - input_seq: Encoded feature sequence with shape (batch_size, seq_length, num_nodes, input_dim)
+            - supports:  Learned adjacency matrix with shape (batch_size, num_nodes, num_nodes)
+            
+        """
+        input_seq, supports, hidden = self._forward_encoder(input_seq, supports)
+        
+        # case pretraining
+        if self.pretrain_with_decoder:
+            input_seq, _, _ = self._forward_decoder(input_seq, supports, hidden)
+            return input_seq
+        
+        # case fine-tuning
+        else:
+            result = self._forward_result(input_seq)    
+            return result, input_seq, supports
 
     def save(self, filepath:str) -> None:
         """
@@ -315,62 +388,3 @@ class SGLC_Classifier(nn.Module):
         model.load_state_dict(checkpoint['model_state_dict'])
         
         return model
-
-# if __name__=="__main__":
-#     def count_parameters(model:nn.Module):
-#         return sum(p.numel() for p in model.parameters() if p.requires_grad)
-    
-#     num_classes     = 2
-#     num_cells       = 2
-#     input_dim       = 256//2
-#     num_nodes       = 21
-#     hidden_dim_GL   = 192
-#     hidden_dim_GGNN = 192
-#     dropout         = 0.5
-#     num_heads       = 8
-#     use_GATv2       = False
-#     use_Transformer = True
-#     concat          = True
-#     num_layers      = 3
-#     use_propagator  = True
-#     use_GRU         = True
-    
-#     model= SGLC_Classifier(
-#         num_classes     = num_classes,
-#         num_cells       = num_cells,
-#         input_dim       = input_dim,
-#         num_nodes       = num_nodes,
-#         hidden_dim_GL   = hidden_dim_GL,
-#         hidden_dim_GGNN = hidden_dim_GGNN,
-#         dropout         = dropout,
-#         num_heads       = num_heads,
-#         use_GATv2       = use_GATv2,
-#         use_Transformer = use_Transformer,
-#         concat          = concat,
-#         use_GRU         = use_GRU,
-#         use_propagator  = use_propagator
-#     )
-    
-#     list_to_print= [(key,value) for key,value in model.config.items()]
-#     string= ""
-#     ljust_value= max([len(item) for item,_ in list_to_print])
-#     for name,value in list_to_print:
-#         string += "{} : {}\n".format(name.ljust(ljust_value), value)
-    
-#     print(f"Total size model : {count_parameters(model):,}")
-#     print(f"\nUsing parametrs:\n{string}")
-    
-#     print()
-    
-#     from torchinfo import summary
-#     BATCH_SIZE= 64
-#     SEQ_LEN= 4
-#     summary(model, 
-#         input_data={
-#             'input_seq': torch.rand((BATCH_SIZE, SEQ_LEN, num_nodes, input_dim)),
-#             'supports': torch.rand((BATCH_SIZE, num_nodes, num_nodes))
-#         },
-#         depth=1,  # Shows more detailed structure
-#         col_names=['input_size', 'output_size', 'num_params', 'trainable'],
-#         verbose=1
-#     )
