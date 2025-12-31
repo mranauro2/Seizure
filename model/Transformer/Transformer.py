@@ -34,7 +34,7 @@ class Transformer(nn.Module):
 
         Args:
             transformer_type (TransformerType):             Type of transformer class to use
-            input_shape (Sequence[int]):                    Shape of the 2D input where the number of expected features in the input is the second dimension
+            input_shape (Sequence[int]):                    Shape of the 2D input where the number of expected features in the input is the second dimension. It is [input_dim, d_model]
             num_heads (int):                                Number of heads in the multi-heads attention models
             
             num_encoder_layers (int):                       Number of sub-encoder layers in the encoder
@@ -184,56 +184,3 @@ class Transformer(nn.Module):
 
     def _forward(self, inputs:Tensor):
         raise NotImplementedError("This function is only a decoration")
-
-
-
-
-
-
-
-
-
-
-
-# Aggiugenre il positional encoding
-# Verificare se ha senso aggiungere qualcosa del tipo 'nn.Embedding'
-
-
-
-import torch.nn as nn
-import torch
-import math
-
-class PositionalEncoding(nn.Module):
-    """
-    https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-    """
-    def __init__(self, d_model, vocab_size=5000, dropout=0.1):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        pe = torch.zeros(vocab_size, d_model)
-        position = torch.arange(0, vocab_size, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float()
-            * (-math.log(10000.0) / d_model)
-        )
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        self.register_buffer("pe", pe)
-
-    def forward(self, x):
-        x = x + self.pe[:, : x.size(1), :]
-        return self.dropout(x)
-    
-    """
-    AND in forward:
-    
-    src = self.embedding(src) * math.sqrt(self.dim_model)
-    tgt = self.embedding(tgt) * math.sqrt(self.dim_model)
-    src = self.positional_encoder(src)
-    tgt = self.positional_encoder(tgt)
-    
-    con self.embedding = nn.Embedding(num_tokens, dim_model)
-    """
