@@ -60,7 +60,7 @@ class SeizureDataset(Dataset):
             preprocess_data (str):              Directory to the preprocess data. If it is not None `input_dir`, `time_step_size`, `max_seq_len`, `use_fft` will not be considered
             
             scaler (Scaler):                    Scaler to normalize the data. It will be applied after the Fast Fourier Transform (if present) and before the computation of the adjacency matrix
-            augmentations (list[Augmentation]): Augmentations to use to augment the data. This classes will increase the number of samples adding trasformed ones
+            augmentations (list[Augmentation]): Augmentations to use to augment the data. This classes will increase the number of samples adding trasformed ones and affect all patient ids. To choose use `apply_augmentations`
             method (str):                       How to compute the adjacency matrix
             top_k (int):                        Maintain only the `top_k` higher value when compute the adjacency matrix
             
@@ -123,13 +123,17 @@ class SeizureDataset(Dataset):
     def scaler(self, value:Scaler) -> None:
         self._scaler= value
 
-    def apply_augmentations(self, augmentations:list[Augmentation]):
-        """Apply the augmentation using the classes passed in the list"""
+    def apply_augmentations(self, augmentations:list[Augmentation], affected_patient_ids:list[str]=None):
+        """
+        Apply the augmentation
+            :param augmentations (list[Augmentation]):  List of augmentation classes to use
+            :param affected_patient_ids (list[str]):    List of patient ids which will be affected by the augmentation. Set to None to affect all
+        """
         self.augmentations = None
         
         # add to the variable all classes with probability not null
         if ((augmentations is not None) and (len(augmentations)>0)):
-            self.augmentations = []
+            self.augmentations:list[Augmentation] = []
             for augmentation in augmentations:
                 if not(augmentation.is_probability_zero()):
                     self.augmentations.append(augmentation)
@@ -145,10 +149,17 @@ class SeizureDataset(Dataset):
             
             for augmentation in self.augmentations:
                 augmentation_index += 1
-                new_file_info.extend( augmentation.generate_infos(self.file_info, augmentation_index=augmentation_index) )
+                new_file_info.extend( augmentation.generate_infos(self.file_info, affected_patient_ids, augmentation_index=augmentation_index) )
             
+            self.file_info_before_augmentaion = self.file_info
             self.file_info = new_file_info
             self._targets = self._generate_targets_dict(self.file_info)
+    
+    def remove_augmentation(self):
+        """Remove all augmentations applied. The dataset could be reduced"""
+        if (self.augmentations is not None):
+            self.file_info = self.file_info_before_augmentaion
+            self.augmentations = None
     
     def __len__(self):
         return len(self.file_info)

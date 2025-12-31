@@ -3,6 +3,7 @@ from model.loss.loss_classes import *
 from torch.utils.data import Subset
 
 from data.dataloader.SeizureDataset import SeizureDataset, SeizureDatasetMethod
+from data.utils import split_patient_data_specific
 from data.scaler.Scaler import *
 
 from utils.constant.constants_main import *
@@ -201,27 +202,34 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
         top_k           = TOP_K,
         lambda_value    = lambda_value
     )
-    pos_samples_before = sum(dataset.targets_list())
-    neg_samples_before = len(dataset.targets_list()) - pos_samples_before
     
-    dataset.apply_augmentations(AUGMENTATIONS)
-    pos_samples_after = sum(dataset.targets_list())
-    neg_samples_after = len(dataset.targets_list()) - pos_samples_after
+    return dataset
+
+def augment_dataset_train(logger:Logger, dataset:SeizureDataset, train_dict:dict[str, list[int]], remove:bool=False):
+    """Augment the dataset or remove the augmentation applied"""
+    pos_samples_before , neg_samples_before = pos_neg_samples(train_dict)
     
-    if (pos_samples_before != pos_samples_after):
-        logger.info("Positive samples are augmented from {:,} to {:,} [{:+.2f}%]".format(
+    _ = dataset.remove_augmentation() if (remove) else dataset.apply_augmentations(AUGMENTATIONS, train_dict.keys())
+    _, train_dict = split_patient_data_specific(dataset.targets_dict(), train_dict.keys())
+    
+    pos_samples_after , neg_samples_after = pos_neg_samples(train_dict)
+    
+    if (pos_samples_before != pos_samples_after) and (logger is not None):
+        logger.info("Positive train samples are {} from {:,} to {:,} [{:+.2f}%]".format(
+            "removed" if (remove) else "augmented",
             pos_samples_before,
             pos_samples_after,
             100*(pos_samples_after - pos_samples_before) / pos_samples_before
         ))
-    if (neg_samples_before != neg_samples_after):
-        logger.info("Negative samples are augmented from {:,} to {:,} [{:+.2f}%]".format(
+    if (neg_samples_before != neg_samples_after) and (logger is not None):
+        logger.info("Negative train samples are {} from {:,} to {:,} [{:+.2f}%]".format(
+            "removed" if (remove) else "augmented",
             neg_samples_before,
             neg_samples_after,
             100*(neg_samples_after - neg_samples_before) / neg_samples_before
-        ))
+    ))
     
-    return dataset
+    return train_dict
 
 def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:bool, loss_type:LossType, device:str) -> tuple[Loss, int, int]:
     """

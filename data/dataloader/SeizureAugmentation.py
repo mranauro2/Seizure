@@ -22,20 +22,21 @@ class Augmentation(ABC):
         self.labels = labels
         self.p = p
     
-    def generate_infos(self, infos:list[SampleData], augmentation_index:int) -> list[SampleData]:
+    def generate_infos(self, infos:list[SampleData], affected_patient_ids:list[str], augmentation_index:int) -> list[SampleData]:
         """
         Generate an augmented list with the same file in the dataset
         Args:
-            infos (list[SampleData]):       List of informations according to `SampleData` class
-            augmentation_index (int):       Index which replace the existing one
+            infos (list[SampleData]):           List of informations according to `SampleData` class
+            affected_patient_ids (list[str]):   Which patient ids will be affected by the augmentation. Set to None to affect all
+            augmentation_index (int):           Index which replace the existing one in the `SampleData` class
         Returns:
-            new_infos (list[SampleData]):   New list of informations according to `SampleData` class where the augmentation_index is replaced when appropriate
+            new_infos (list[SampleData]):       New list of informations according to `SampleData` class where the augmentation_index is replaced when appropriate
         """
         self._index = augmentation_index
         
         new_infos:list[SampleData] = []
         for sample in infos:
-            if (sample.has_seizure in self.labels):
+            if (sample.has_seizure in self.labels) and ((affected_patient_ids is None) or (sample.patient_id in affected_patient_ids)):
                 if (self.random_generator.random() < self.p):
                     new_infos.append(sample._replace(augmentation=augmentation_index))
         

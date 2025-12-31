@@ -346,12 +346,6 @@ def train(
 
 def main_k_fold():
     """Main to evaluate the performance with k-fold cross validation"""
-    
-    """
-    In tutto questo bisogna:
-        poi correggere il checkpoint manager
-        capire come poter usare thread o simili per lanciare più job insieme dallo stesso file
-    """
     # take input from command line and print some informations
     loss_type, input_dir, files_record, method, lambda_value, scaler_type, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
     dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
@@ -372,7 +366,12 @@ def main_k_fold():
         string = ""
         string+= "Fold number {}".format(index+1)
         for name,dictionary in zip(names,item):
-            samples_pos, samples_neg = pos_neg_samples(dictionary)
+            if (name=="train"):
+                dictionary = augment_dataset_train(LOGGER, dataset, dictionary)
+                samples_pos, samples_neg = pos_neg_samples(dictionary)
+                dictionary = augment_dataset_train(None, dataset, dictionary, remove=True)
+            else:
+                samples_pos, samples_neg = pos_neg_samples(dictionary)
             string+= "\n\tUsing patient(s) for {} : '{}'".format(name.ljust(ljust_value), ", ".join(dictionary.keys()))
             string+= "\n\t\tTotal samples           : {:>{}}/{:,} (positive) & {:>{}}/{:,} (negative)".format(
                 samples_pos,
@@ -407,6 +406,7 @@ def main_k_fold():
         current_epochs = MAX_NUM_EPOCHS if (index*MAX_NUM_EPOCHS <= num_epochs) else (num_epochs % MAX_NUM_EPOCHS)
         
         for train_dict,val_dict in TqdmMinutesAndHours(k_fold, desc="K-Fold", leave=False):
+            train_dict = augment_dataset_train(None, dataset, train_dict)
             train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
             val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
             
@@ -452,6 +452,9 @@ def main_k_fold():
             else:
                 raise NotImplementedError("Evaluation method with k-fold is not implemented yet")
             
+            # remove the augmentation before pass to the next fold
+            _ = augment_dataset_train(None, dataset, train_dict, remove=True)
+            
         if epoch_interrupted:
             LOGGER.warning(f"Interruption detected after completing epoch for all folds")
             break
@@ -464,13 +467,15 @@ def main_test_set():
     loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
     dataset:SeizureDataset = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
     
-    # splitting data (and removing unwanted patients)
+    # splitting data, augment train set and removing unwanted patients
     remaining_data = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)[0] if (EXCEPT_DATA is not None) else dataset.targets_dict()
     
     test_dict = None
     if (TEST_PATIENT_IDS is not None):
         remaining_data, test_dict = split_patient_data_specific(remaining_data, TEST_PATIENT_IDS)
     train_dict, val_dict = split_patient_data(remaining_data, split_ratio=PERCENTAGE_TRAINING_SPLIT) if (VAL_PATIENT_IDS is None) else split_patient_data_specific(remaining_data, VAL_PATIENT_IDS)
+    
+    train_dict = augment_dataset_train(LOGGER, dataset, train_dict)
     
     train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
     val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
