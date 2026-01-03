@@ -125,6 +125,10 @@ def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scal
     Returns:
         out (Scaler|None):          Returns the scaler if the input parameter is not None, otherwise None
     """
+    def func_operation(x:Tensor) -> Tensor:
+        """Operation to apply at the scaler"""
+        return x.transpose(dim0=0, dim1=2).reshape(x.size(2), -1)
+    
     if (scaler is not None):
         if (logger is not None):
             logger.info(f"Loading scaler '{scaler.name}'...")
@@ -205,7 +209,21 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
     return model
 
 def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], method:SeizureDatasetMethod, lambda_value:float|None, scaler:ScalerType|None, preprocess_dir:str|None):
-    """Generate the dataset"""
+    """
+    Generate the dataset
+    
+    Args:
+        logger (Logger):                Logger to log some information
+        input_dir (str):                Directory to data files
+        file_record (list[str]):        List of simple files with line records structure according to the class :class:`SeizureDatasetDetection` or  :class:`SeizureDatasetPrediction`
+        method (SeizureDatasetMethod):  How to compute the adjacency matrix
+        lambda_value (float|None):      Maximum eigenvalue for scaling the Laplacian matrix. If negative, computed automatically, if None compute only the Laplacian matrix 
+        scaler (ScalerType|None):       Scaler type used only to log the information
+        preprocess_dir (str|None):      Directory to the preprocess data
+        
+    Returns:
+        dataset:
+    """
     string_additional_info= additional_info(
         preprocessed_data=(preprocess_dir is not None),
         dataset_data=[
@@ -286,10 +304,19 @@ def augment_dataset_train(logger:Logger|None, dataset:SeizureDatasetDetection, t
     
     return train_dict
 
-def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:bool, loss_type:LossDetectionType|LossPredictionType, device:str) -> tuple[Loss, int, int]:
+def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:bool, loss_type:Loss, device:str) -> tuple[Loss, int, int]:
     """
-    Modify NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA and generate the loss
-        :returns tuple(Loss, int, int): Loss function, num_seizure_data, num_not_seizure_data
+    Generate a loss and compute the number of seizure and not seizure data (if the model is set to detection)
+    
+    Args:
+        logger (Logger|None):               Logger to log some information. If it is None, it is skipped
+        train_dict (dict[str, list[int]]):  Dictionary with patient_id as key and list of labels of integers as value. It is used to compute the number of seizure and not seizure data
+        do_train (bool):                    If True, the model is supposed to be in train mode. Check if the number of seizure and not seizure data are different from 0
+        loss_type (Loss):                   Loss type to use. If its type its not set accordint to the :const:`PRETRAIN` parameter raise an exception
+        device (str):                       Device to place the loss on. Used only if the loss has a weight and it is set by the constant :const:`USE_WEIGHT`
+    
+    Returns:
+        tuple(Loss, int, int):              Loss function, number of seizure data, number of not seizure data
     """
     if (PRETRAIN) and isinstance(loss_type, LossDetectionType):
         raise ValueError("The model is set to self-supevised learning but the loss type is set to fine-tuning. Choose between '{}'".format("', '".join([loss.name.lower() for loss in LossPredictionType])))
@@ -323,35 +350,47 @@ def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:
             loss = MSE()
         case _:
             raise NotImplementedError("Loss {} is not implemented yet".format(loss_type))
-    loss_params_str = dict_to_str(list(loss.parameters().items()))
+
     if (logger is not None):
-        logger.info("Using loss type '{}'{}".format(loss_type.name, '' if loss_params_str=="" else f' with parameters :\n{loss_params_str}'))
+        loss_params_str = dict_to_str(list(loss.parameters().items()))
+        if (loss_params_str is not None):
+            logger.info("Using loss type '{}'{}".format(loss_type.name, '' if loss_params_str=="" else f' with parameters :\n{loss_params_str}'))
     
     return loss, NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA
 
 def pos_neg_samples(dictionary:dict[str, list[int]]):
-    """Returns the positive and negative samples for the dictionary passed"""
+    """
+        :param dictionary (dict[str, list[int]]): Dictionary with patient_id as key and list of labels of integers as value
+        :returns positive/negative (tuple[int,int]): Number of positive and negative samples for the passed dictionary
+    """
     l= [label for value_list in dictionary.values() for label in value_list]
     return sum(l), len(l)-sum(l)
 
 def check_stop_file(stop_file:str):
-    """Check if the stop file exists"""
+    """Check if the stop file passed as parameter exists"""
     return os.path.exists(stop_file)
 
 def delete_stop_file(stop_file:str):
-    """Delete the stop file if exists"""
+    """Delete the stop file passed as parameter if exists"""
     if check_stop_file(stop_file):
         os.remove(stop_file)
 
-def func_operation(x:Tensor) -> Tensor:
-    """Operation to apply at the scaler"""
-    return x.transpose(dim0=0, dim1=2).reshape(x.size(2), -1)
-
-def dict_to_str(list_to_print:list[tuple[str,any]], print_none:bool=False, print_zero:bool=False):
-    """Generate a string given the input"""
-    string= ""
+def dict_to_str(list_to_print:list[tuple[str,Any]], print_none:bool=False, print_zero:bool=False):
+    """
+    Generate a string from the input. It aligns the names and the values to have a better format
+    
+    Args:
+        list_to_print (list[tuple[str,any]]):   Each item of the list will be printed using `str` as name and `Any` as value
+        print_none (bool):                      If set to True print also the variable which are set to None
+        print_zero (bool):                      If set to True print also the variable which are set to zero and False
+        
+    Returns:
+        out (str|None):                         A string if there is something to print, None if the list is empty
+    """
     if (len(list_to_print)==0):
         return
+    
+    string= ""
     ljust_value= max([len(item) for item,_ in list_to_print])
     for name,value in list_to_print:
         if not(print_none) and (value is None):
@@ -361,7 +400,7 @@ def dict_to_str(list_to_print:list[tuple[str,any]], print_none:bool=False, print
         string += "\t{} : {}\n".format(name.ljust(ljust_value), value)
     return string
 
-def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -> str:
+def additional_info(preprocessed_data:bool, dataset_data:list[tuple[str,Any]]) -> str:
     """Extract static additionl info"""
     # DATASET
     dataset_tuple_no_preprocess = [
