@@ -58,10 +58,10 @@ class Transformer(nn.Module):
         if (len(input_shape) != 2):
             raise ValueError("Expected 'input_shape' as 2D but got {}-D".format(len(input_shape)))
         
-        if (transformer_type == TransformerType.TRANSFORMER_ENCODER) and (num_decoder_layers is not None):
+        if (transformer_type == TransformerType.TRANSFORMER_ENCODER) and (num_decoder_layers is not None) and (num_decoder_layers != 0):
             msg = "'num_decoder_layers' will be ignored because the type is set to {}".format(transformer_type.name)
             warnings.warn(msg)
-        if (transformer_type == TransformerType.TRANSFORMER_DECODER) and (num_encoder_layers is not None):
+        if (transformer_type == TransformerType.TRANSFORMER_DECODER) and (num_encoder_layers is not None) and (num_encoder_layers != 0):
             msg = "'num_encoder_layers' will be ignored because the type is set to {}".format(transformer_type.name)
             warnings.warn(msg)
         
