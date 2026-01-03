@@ -241,7 +241,7 @@ def split_patient_data(
     Split patient data in train and validation to maintain positive/negative ratio using optimized search
     
     Args:
-        patient_data (dict[str,list[int]]): Dictionary with patient_id as key and list of labels of integers as value
+        patient_data (dict[str,list[int]]): Dictionary with patient_id as key and list of labels of integers as value. If the list if not of int it will anyway accepted but not maintain positive/negative ratio
         split_ratio (float):                Desired proportion of *total samples* that should appear in the first set. Must be between 0 and 1
         
         val_remaining_patients (int):       If specified, the validation set will contain exactly this many patients, overriding the `split_ratio` parameter
@@ -296,7 +296,7 @@ def split_patient_data(
         subjects.append({
             'id': patient_id,
             'total': len(labels),
-            'positives': sum(labels)
+            'positives': sum(labels) if isinstance(labels[0], int) else 0
         })
     
     total_pos = sum(s['positives'] for s in subjects)
@@ -505,7 +505,7 @@ def split_patient_data_specific(patient_data:dict[str,Any], patient_ids:list[str
     It performs a safe copy of the input dictionary so the original data is not modified
 
     Args:
-        patient_data (dict[str,Any]): Dictionary with patient_id as key and list of labels of integers as value
+        patient_data (dict[str,Any]): Dictionary with patient_id as key and anything as values
         patient_ids (list[str]):      List of keys to extract from `patient_data`
 
     Returns:
