@@ -1,16 +1,17 @@
 import argparse
-from model.loss.LossType import LossType
+import warnings
+from model.loss.LossType import LossDetectionType, LossPredictionType
 from data.scaler.ScalerType import ScalerType
 from data.dataloader.SeizureDataset import SeizureDatasetMethod
 
 
-def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, float|None, ScalerType|None, bool, int, bool, int, bool, str|None]:
+def parse_arguments() -> tuple[LossPredictionType|LossDetectionType, str, list[str], SeizureDatasetMethod, float|None, ScalerType|None, bool, int, bool, bool, int, bool, str|None]:
     """
     Parses command-line arguments
     
     Returns:
         tuple:
-            - loss_type (LossType):\\
+            - loss_type (LossPredictionType|LossDetectionType):\\
                 Type of loss to use during train/evaluation
             - input_dir (str):\\
                 Path to the directory containing resampled files
@@ -28,6 +29,8 @@ def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, f
                 Numeric identifier to search for model files inside the standard folder. Can be None
             - train (bool):\\
                 Run in training mode
+            - load_pretrain (bool):\\
+                Load pretrain model for fine-tuning
             - epochs (int):\\
                 The number of epochs to train for. Required for training.
             - verbose (bool):\\
@@ -38,7 +41,11 @@ def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, f
     
     list_scaler_type= [scaler.name.lower() for scaler in ScalerType]
     list_seizuredataset_methods= [method.name.lower() for method in SeizureDatasetMethod]
-    list_loss_type= [loss.name.lower() for loss in LossType]
+    
+    list_loss_detection_type= [loss.name.lower() for loss in LossDetectionType]
+    list_loss_prediction_type =[loss.name.lower() for loss in LossPredictionType]
+    
+    list_loss_type= list_loss_detection_type + list_loss_prediction_type
     
     parser = argparse.ArgumentParser(
         description="Train or evaluate the `model.ASGPFmodel.SGLCModel_classification` on specified files. Other parameters are hardcoded inside constants files. The files are `utils.constants_eeg.py` and `utils.constants_main.py`",
@@ -56,9 +63,10 @@ def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, f
     parser.add_argument('--lambda_value',   type=float, default=None,                           help="Maximum eigenvalue for scaling the Laplacian matrix. If negative, computed automatically, if None compute only the Laplacian matrix")
     parser.add_argument('--scaler',   '-s', type=str,   default=None,                           help="If use or not a scaler. It can be: {}".format(", ".join(list_scaler_type)))
     parser.add_argument('--single_scaler',  action='store_true',                                help="If True, compute single scaler values across all dimensions instead of compute scaler values per feature")
+    parser.add_argument('--load_pretrain',  action='store_true',                                help="Load specific pretrain model for fine-tuning")
     parser.add_argument('--save_num', '-n', type=int,   default=None,                           help="Numeric identifier to search for model files inside the standard folder (e.g., checkpoint or epoch number)")
     parser.add_argument('--train',    '-t', action='store_true',                                help="Run in training mode")
-    parser.add_argument('--epochs',   '-e', type=int,   default=None,                           help="Number of epochs to train for. Required if --train is set.")
+    parser.add_argument('--epochs',   '-e', type=int,   default=None,                           help="Number of epochs to train for. Required if --train is set")
     parser.add_argument('--verbose',  '-v', action='store_true',                                help="Enable more detailed verbose logging and console output")
 
     args = parser.parse_args()
@@ -85,10 +93,10 @@ def parse_arguments() -> tuple[LossType, str, list[str], SeizureDatasetMethod, f
         args.input_dir= None
     
     method = SeizureDatasetMethod[args.method.upper()]
-    loss   = LossType[args.loss.upper()]
+    loss   = LossPredictionType[args.loss.upper()] if (args.loss in list_loss_prediction_type) else LossDetectionType[args.loss.upper()]
     scaler = None if (args.scaler is None) else ScalerType[args.scaler.upper()]
     
-    return loss, args.input_dir, args.files_record, method, args.lambda_value, scaler, args.single_scaler, args.save_num, args.train, args.epochs, args.verbose, preprocess_dir
+    return loss, args.input_dir, args.files_record, method, args.lambda_value, scaler, args.single_scaler, args.save_num, args.train, args.load_pretrain, args.epochs, args.verbose, preprocess_dir
 
 if __name__=="__main__":
     args= parse_arguments()
