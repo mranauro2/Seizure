@@ -1,8 +1,10 @@
 from model.SGLClassifier import SGLC_Classifier
-from model.loss.loss_classes import *
 from torch.utils.data import Subset
 
-from data.dataloader.SeizureDataset import SeizureDatasetDetection, SeizureDatasetMethod
+from model.loss.loss_classes import *
+from model.loss.LossType import *
+
+from data.dataloader.SeizureDataset import BaseSeizureDataset, SeizureDatasetDetection, SeizureDatasetPrediction, SeizureDatasetMethod
 from data.utils import split_patient_data_specific
 from data.scaler.Scaler import *
 
@@ -12,6 +14,7 @@ from utils.constant.constants_eeg import *
 from datetime import datetime, timedelta
 from tqdm.auto import tqdm
 from logging import Logger
+from typing import Any
 import os
 import re
 
@@ -89,13 +92,13 @@ def get_model(dir:str, specific_num:int=None) -> tuple[str, int]:
     
     return output_filename, curr_epoch
 
-def scaler_file_patient_ids(dictionary:dict[str, list[int]], separator:str="-") -> str:
+def scaler_file_patient_ids(dictionary:dict[str,Any], separator:str="-") -> str:
     """
     Generate a string using the `separator` to divide the numbers of the patient ids.
     
     Args:
-        dictionary (dict[str, list[int]]):  Dictionary with patient_id as key and list of labels of integers as value
-        separator (str):                    Separator to use to divide the patient ids
+        dictionary (dict[str,Any]): Dictionary with patient_id as key and anything as value
+        separator (str):            Separator to use to divide the patient ids
     
     Examples:
         >>> scaler_file_patient_ids(dictionary, separator="_")
@@ -107,8 +110,21 @@ def scaler_file_patient_ids(dictionary:dict[str, list[int]], separator:str="-") 
     """
     return separator.join(sorted([key.replace("chb", "") for key in dictionary.keys()], key=lambda x : int(x)))
 
-def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scaler:bool, train_dict:dict[str,list[int]], train_set:Subset, device:str) -> Scaler|None:
-    """Load the scaler if `scaler` is not None and save it"""
+def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scaler:bool, train_dict:dict[str,Any], train_set:Subset, device:str) -> Scaler|None:
+    """
+    Load the scaler and returns it. If the scaler is not passed return None
+    
+    Args:
+        logger (Logger|None):       Logger to log some information. If it is None, it is skipped
+        scaler (ScalerType|None):   Set if you want to use a scaler and which one you want to use
+        single_scaler (bool):       If True, compute single scaler values across all dimensions instead of compute scaler values per feature
+        train_dict (dict[str,Any]): Dictionary with patient_id as key and anything as value
+        train_set (Subset):         Subset where the train set is loaded
+        device (str):               Device where put the scaler on (the same as the dataset)
+    
+    Returns:
+        out (Scaler|None):          Returns the scaler if the input parameter is not None, otherwise None
+    """
     if (scaler is not None):
         if (logger is not None):
             logger.info(f"Loading scaler '{scaler.name}'...")
@@ -124,55 +140,66 @@ def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scal
     
     return scaler
 
-def generate_model(dataset:SeizureDatasetDetection, device:str):
-    """Generate the model using the constant in the constant files"""
+def generate_model(dataset:BaseSeizureDataset, device:str):
+    """
+    Generate the model using the constant in the constant files
+    
+    Args:
+        dataset (BaseSeizureDataset):   Dataset to use during the train/eval mode
+        device (str):                   Device to place the model on
+    
+    Returns:
+        model (SGLC_Classifier):        New model
+    """
     feature_matrix, _, _ = dataset[0]
     num_nodes= feature_matrix.size(1)
     input_dim= feature_matrix.size(2)
             
     model= SGLC_Classifier(
-        num_classes         = NUM_CLASSES,
+        num_classes             = NUM_CLASSES,
         
-        num_cells           = NUM_CELLS,
-        input_dim           = input_dim,
-        num_nodes           = num_nodes,
+        num_cells               = NUM_CELLS,
+        input_dim               = input_dim,
+        num_nodes               = num_nodes,
         
-        graph_skip_conn     = GRAPH_SKIP_CONN,
-        use_GRU             = USE_GRU,
-        hidden_per_step     = HIDDEN_PER_STEP,
+        graph_skip_conn         = GRAPH_SKIP_CONN,
+        use_GRU                 = USE_GRU,
+        hidden_per_step         = HIDDEN_PER_STEP,
+        pretrain_with_decoder   = PRETRAIN,
+        new_pretrain_hidden     = PRETRAIN_NEW_HIDDEN,
         
-        hidden_dim_GL       = HIDDEN_DIM_GL,
-        attention_type      = ATTENTION_TYPE,
-        num_GL_layers       = NUM_GL_LAYERS,
-        num_GL_heads        = NUM_GL_HEADS,
-        dropout_GL          = GL_DROPOUT,
-        epsilon             = EPSILON,
+        hidden_dim_GL           = HIDDEN_DIM_GL,
+        attention_type          = ATTENTION_TYPE,
+        num_GL_layers           = NUM_GL_LAYERS,
+        num_GL_heads            = NUM_GL_HEADS,
+        dropout_GL              = GL_DROPOUT,
+        epsilon                 = EPSILON,
         
-        hidden_dim_GGNN     = HIDDEN_DIM_GGNN,
-        num_steps           = NUM_STEPS,
-        num_GGNN_layers     = NUM_GGNN_LAYERS,
-        act_GGNN            = ACT_GGNN,
-        use_GRU_in_GGNN     = USE_GRU_IN_GGNN,
+        hidden_dim_GGNN         = HIDDEN_DIM_GGNN,
+        num_steps               = NUM_STEPS,
+        num_GGNN_layers         = NUM_GGNN_LAYERS,
+        act_GGNN                = ACT_GGNN,
+        use_GRU_in_GGNN         = USE_GRU_IN_GGNN,
         
-        transformer_type    = TRANSFORMER_TYPE,
-        num_transf_heads    = TRANSFORMER_NUM_HEADS,
-        num_encoder_layers  = NUM_ENCODER_LAYERS,
-        num_decoder_layers  = NUM_DECODER_LAYERS,
-        positional_encoding = POSITIONAL_ENCODING,
-        dim_feedforward     = DIM_FEEDFORWARD,
-        dropout_transf      = TRANSFORMER_DROPOUT,
-        act_transf          = TRANSFORMER_ACT,
+        transformer_type        = TRANSFORMER_TYPE,
+        num_transf_heads        = TRANSFORMER_NUM_HEADS,
+        num_encoder_layers      = NUM_ENCODER_LAYERS,
+        num_decoder_layers      = NUM_DECODER_LAYERS,
+        positional_encoding     = POSITIONAL_ENCODING,
+        dim_feedforward         = DIM_FEEDFORWARD,
+        dropout_transf          = TRANSFORMER_DROPOUT,
+        act_transf              = TRANSFORMER_ACT,
         
-        num_inputs          = NUM_INPUTS,
+        num_inputs              = NUM_INPUTS,
         
-        use_sigmoid         = USE_SIGMOID,
-        act                 = GL_ACT,
-        v2                  = USE_GATv2,
-        concat              = CONCAT,
-        beta                = BETA,
+        use_sigmoid             = USE_SIGMOID,
+        act                     = GL_ACT,
+        v2                      = USE_GATv2,
+        concat                  = CONCAT,
+        beta                    = BETA,
         
-        seed                = RANDOM_SEED,
-        device              = device
+        seed                    = RANDOM_SEED,
+        device                  = device
     )
     
     return model
@@ -191,22 +218,50 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
     logger.info(string)
     
     # load dataset
-    dataset= SeizureDatasetDetection(
-        input_dir       = input_dir,
-        files_record    = files_record,
-        time_step_size  = TIME_STEP_SIZE if (preprocess_dir is None) else None,
-        max_seq_len     = MAX_SEQ_LEN    if (preprocess_dir is None) else None,
-        use_fft         = USE_FFT        if (preprocess_dir is None) else None,
-        preprocess_data = preprocess_dir,
-        method          = method,
-        top_k           = TOP_K,
-        lambda_value    = lambda_value
-    )
+    if (PRETRAIN):
+        dataset = SeizureDatasetPrediction(
+            input_dir       = input_dir,
+            files_record    = files_record,
+            time_step_size  = TIME_STEP_SIZE if (preprocess_dir is None) else None,
+            max_seq_len     = MAX_SEQ_LEN    if (preprocess_dir is None) else None,
+            use_fft         = USE_FFT        if (preprocess_dir is None) else None,
+            preprocess_data = preprocess_dir,
+            method          = method,
+            top_k           = TOP_K,
+            lambda_value    = lambda_value
+        )
+    else:
+        dataset= SeizureDatasetDetection(
+            input_dir       = input_dir,
+            files_record    = files_record,
+            time_step_size  = TIME_STEP_SIZE if (preprocess_dir is None) else None,
+            max_seq_len     = MAX_SEQ_LEN    if (preprocess_dir is None) else None,
+            use_fft         = USE_FFT        if (preprocess_dir is None) else None,
+            preprocess_data = preprocess_dir,
+            method          = method,
+            top_k           = TOP_K,
+            lambda_value    = lambda_value
+        )
     
     return dataset
 
-def augment_dataset_train(logger:Logger, dataset:SeizureDatasetDetection, train_dict:dict[str, list[int]], remove:bool=False):
-    """Augment the dataset or remove the augmentation applied"""
+def augment_dataset_train(logger:Logger|None, dataset:SeizureDatasetDetection, train_dict:dict[str, list[int]], remove:bool=False):
+    """
+    Use the augmentation in the dataset passed
+    
+    Args:
+        logger (Logger|None):               Logger to log some information. If it is None, it is skipped
+        dataset (SeizureDatasetDetection):  Only on this dataset is possible to apply the augmentation. If the dataset is of a different class the operation is ignored
+        train_dict (dict[str,list[int]]):   Dictionary with patient_id as key and list of labels of integers as value
+        remove (bool):                      If set remove the augmentation instead of apply it
+    
+    Returns:
+        train_dict (dict[str,list[int]]):   The train dictionary after the augmentation.\\
+                                            If the dataset if of a different class the function return whatever is passed in the `train_dict` parameter
+    """
+    if not(isinstance(dataset, SeizureDatasetDetection)):
+        return train_dict
+    
     pos_samples_before , neg_samples_before = pos_neg_samples(train_dict)
     
     _ = dataset.remove_augmentation() if (remove) else dataset.apply_augmentations(AUGMENTATIONS, train_dict.keys())
@@ -231,31 +286,41 @@ def augment_dataset_train(logger:Logger, dataset:SeizureDatasetDetection, train_
     
     return train_dict
 
-def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:bool, loss_type:LossType, device:str) -> tuple[Loss, int, int]:
+def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:bool, loss_type:LossDetectionType|LossPredictionType, device:str) -> tuple[Loss, int, int]:
     """
     Modify NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA and generate the loss
         :returns tuple(Loss, int, int): Loss function, num_seizure_data, num_not_seizure_data
     """
-    NUM_SEIZURE_DATA = 0
-    NUM_NOT_SEIZURE_DATA = 0
+    if (PRETRAIN) and isinstance(loss_type, LossDetectionType):
+        raise ValueError("The model is set to self-supevised learning but the loss type is set to fine-tuning. Choose between '{}'".format("', '".join([loss.name.lower() for loss in LossPredictionType])))
+    if not(PRETRAIN) and isinstance(loss_type, LossPredictionType):
+        raise ValueError("The model is set to fine-tuning but the loss type is set to self-supervised learning. Choose between '{}'".format("', '".join([loss.name.lower() for loss in LossDetectionType])))
+    
+    NUM_SEIZURE_DATA = -1
+    NUM_NOT_SEIZURE_DATA = -1
     
     # set the number of seizure and not seizure data
-    NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = pos_neg_samples(train_dict)
-    if do_train and (NUM_NOT_SEIZURE_DATA==0):
-        raise ValueError(f"Training aborted, no data without seizure")
-    if do_train and (NUM_SEIZURE_DATA==0):
-        raise ValueError(f"Training aborted, no data with seizure")
+    if not(PRETRAIN):
+        NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = pos_neg_samples(train_dict)
+        if do_train and (NUM_NOT_SEIZURE_DATA==0):
+            raise ValueError(f"Training aborted, no data without seizure")
+        if do_train and (NUM_SEIZURE_DATA==0):
+            raise ValueError(f"Training aborted, no data with seizure")
     
     # create loss to use
     weight = torch.Tensor([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA]).to(device=device) if USE_WEIGHT else None
     alpha = FOCAL_LOSS_APLHA if (FOCAL_LOSS_APLHA is not None) else NUM_NOT_SEIZURE_DATA / (NUM_NOT_SEIZURE_DATA + NUM_SEIZURE_DATA)
     match loss_type:
-        case LossType.CROSS_ENTROPY:
+        case LossDetectionType.CROSS_ENTROPY:
             loss = CrossEntropy(weight=weight)
-        case LossType.BCE_LOGITS:
+        case LossDetectionType.BCE_LOGITS:
             loss = BCE_Logits(num_classes=NUM_CLASSES, pos_weight=weight)
-        case LossType.FOCAL_LOSS:
+        case LossDetectionType.FOCAL_LOSS:
             loss = FocalLoss(num_classes=NUM_CLASSES, alpha=alpha, gamma=FOCAL_LOSS_GAMMA)
+        case LossPredictionType.MAE:
+            loss = MAE()
+        case LossPredictionType.MSE:
+            loss = MSE()
         case _:
             raise NotImplementedError("Loss {} is not implemented yet".format(loss_type))
     loss_params_str = dict_to_str(list(loss.parameters().items()))
@@ -285,6 +350,8 @@ def func_operation(x:Tensor) -> Tensor:
 def dict_to_str(list_to_print:list[tuple[str,any]], print_none:bool=False, print_zero:bool=False):
     """Generate a string given the input"""
     string= ""
+    if (len(list_to_print)==0):
+        return
     ljust_value= max([len(item) for item,_ in list_to_print])
     for name,value in list_to_print:
         if not(print_none) and (value is None):
@@ -345,6 +412,7 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     ])
     GGNN_str = "GGNN info:\n{}".format(dict_to_str(GGNN_tuple))
     
+    # TRANSFORMER
     transformer_tuple = [
         ("TRANSFORMER_TYPE", TRANSFORMER_TYPE),
         ("TRANSFORMER_NUM_HEADS", TRANSFORMER_NUM_HEADS),
@@ -358,6 +426,13 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     ]
     transformer_str = "Tansformer info:\n{}".format(dict_to_str(transformer_tuple))
     
+    # PRETRAIN
+    pretrain_tuple = [
+        ("PRETRAIN", PRETRAIN),
+        ("PRETRAIN_NEW_HIDDEN", PRETRAIN_NEW_HIDDEN)
+    ]
+    pretrain_str = "Pretrain info:\n{}".format(dict_to_str(pretrain_tuple))
+    
     # LOSSES
     loss_tuple = [
         ("LEARNING_RATE", LEARNING_RATE),
@@ -367,6 +442,6 @@ def additional_info(preprocessed_data:bool, dataset_data=list[tuple[str,any]]) -
     ]
     loss_str = "Losses info:\n{}".format(dict_to_str(loss_tuple, print_zero=True))
     
-    total_str = "\n".join([dataset_str, model_str, GL_str, GGNN_str, transformer_str, loss_str])
+    total_str = "\n".join([dataset_str, model_str, GL_str, GGNN_str, transformer_str, pretrain_str, loss_str])
         
     return total_str

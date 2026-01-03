@@ -14,7 +14,7 @@ from data.scaler.Scaler import *
 from data.utils import *
 from train_utils import *
 
-from data.dataloader.SeizureDataset import SeizureDatasetDetection
+from data.dataloader.SeizureDataset import SeizureDatasetDetection, SeizureDatasetPrediction
 from data.dataloader.SeizureSampler import SeizureSampler
 
 from model.SGLClassifier import SGLC_Classifier
@@ -76,6 +76,52 @@ def train_or_eval(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss
     Returns:
         list(tuple(str, float)):            The list has as many tuples as used metrics. Each tuple have the name of the metric and its value
     """
+    pass
+
+def train_or_eval_prediction(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss:LossPrediction, optimizer:torch.optim.Optimizer, show_progress:bool=False, verbose:bool=False) -> list[tuple[str, float]]:
+    """Next output prediction function of `train_or_eval`"""
+    is_training = optimizer is not None
+    model.train(is_training)
+    
+    # init metrics
+    average_total = Loss_Meter()
+    
+    # enable or not the gradients
+    with (torch.enable_grad() if is_training else torch.no_grad()):
+        for x,target,adj in (tqdm(data_loader, desc=f"{'Train' if model.training else 'Eval'} current epoch", leave=False) if show_progress else data_loader):
+            x:Tensor= x.to(device=DEVICE)
+            target:Tensor= target.to(device=DEVICE)
+            adj:Tensor= adj.to(device=DEVICE)
+            
+            prediction = model.forward(x, adj)
+            
+            loss = prediction_loss.compute_loss(prediction, target)
+            
+            if is_training:
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            
+            average_total.update(loss.unsqueeze(0))
+    
+    model.eval()
+    
+    metrics= [
+        average_total.get_metric()
+    ]
+    
+    # print metrics during execution
+    if verbose:
+        mode= "Train" if is_training else "Eval"
+        max_len= max(len(name) for name,_ in metrics)
+        print(f"\n{mode} mode:")
+        for name,value in metrics:
+            print(f"{name:<{max_len}} --> {value:.6f}")
+    
+    return metrics
+
+def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, prediction_loss:LossDetection, optimizer:torch.optim.Optimizer, show_progress:bool=False, verbose:bool=False) -> list[tuple[str, float]]:
+    """Detection function of `train_or_eval`"""
     is_training = optimizer is not None
     model.train(is_training)
     
@@ -347,7 +393,9 @@ def train(
 def main_k_fold():
     """Main to evaluate the performance with k-fold cross validation"""
     # take input from command line and print some informations
-    loss_type, input_dir, files_record, method, lambda_value, scaler_type, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
+    loss_type, input_dir, files_record, method, lambda_value, scaler_type, single_scaler, save_num, do_train, load_pretrain, num_epochs, verbose, preprocess_dir = parse_arguments()
+    if (load_pretrain):
+        raise NotImplementedError("load_pretrain using k-fold validation is not implemented")
     dataset:SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
     
     # removing unwanted patients
@@ -464,8 +512,10 @@ def main_k_fold():
 def main_test_set():
     """Main to evaluate the patients in the test"""
     # take input from command line and print some informations
-    loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, num_epochs, verbose, preprocess_dir = parse_arguments()
-    dataset:SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
+    loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, load_pretrain, num_epochs, verbose, preprocess_dir = parse_arguments()
+    if (load_pretrain) and (PRETRAIN):
+        raise ValueError("The model is set on self-supervised learning but it want to load pre-trained weights to do fine-tuning! Both 'PRETRAIN' constant and '--load_pretrain' parameter are set to True")
+    dataset:SeizureDatasetPrediction|SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
     
     # splitting data, augment train set and removing unwanted patients
     remaining_data = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)[0] if (EXCEPT_DATA is not None) else dataset.targets_dict()
@@ -486,12 +536,11 @@ def main_test_set():
     
     # generating new scaler
     scaler = scaler_load_and_save(LOGGER, scaler, single_scaler, train_dict, train_set, device='cpu')
-    if (scaler is not None):
-        dataset.scaler= scaler
+    dataset.scaler= scaler
     
-    # generate dataloaders
+    # generate dataloaders and sampler
     train_sampler = None
-    if (MIN_SAMPLER_PER_BATCH != 0):
+    if (MIN_SAMPLER_PER_BATCH != 0) and not(PRETRAIN):
         train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
         LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
 
@@ -507,12 +556,13 @@ def main_test_set():
     for name,dictionary in zip(names,dictionaries):
         if (dictionary is None):
             continue
-        string = "" 
-        samples_pos, samples_neg = pos_neg_samples(dictionary)
+        string = ""
         string+= "Using patient(s) for {} : '{}'".format(name.ljust(ljust_value), ", ".join(dictionary.keys()))
-        string+= "\n\tTotal positive samples  : {:>{}}/{:,}".format(samples_pos, len(str(samples_pos+samples_neg)), samples_pos+samples_neg)
-        string+= "\n\tTotal negative samples  : {:>{}}/{:,}".format(samples_neg, len(str(samples_pos+samples_neg)), samples_pos+samples_neg)
-        string+= "\n\tPositive ratio          : {:.3f}%".format(100 * samples_pos / (samples_pos+samples_neg))
+        if not(PRETRAIN):
+            samples_pos, samples_neg = pos_neg_samples(dictionary)
+            string+= "\n\tTotal positive samples  : {:>{}}/{:,}".format(samples_pos, len(str(samples_pos+samples_neg)), samples_pos+samples_neg)
+            string+= "\n\tTotal negative samples  : {:>{}}/{:,}".format(samples_neg, len(str(samples_pos+samples_neg)), samples_pos+samples_neg)
+            string+= "\n\tPositive ratio          : {:.3f}%".format(100 * samples_pos / (samples_pos+samples_neg))
         LOGGER.info(string)
     
     # load model if exists or create a new model
@@ -521,12 +571,13 @@ def main_test_set():
     LOGGER.info("Loading model...")
     model= generate_model(dataset, DEVICE)
     
-    filename, num_epoch = get_model(MODEL_SAVE_FOLDER, specific_num=save_num)
+    model_save_folder = f"{MODEL_SAVE_FOLDER}{PRETRAIN_SUFFIX}" if (load_pretrain) else MODEL_SAVE_FOLDER
+    filename, num_epoch = get_model(model_save_folder, specific_num=save_num)
     START_EPOCH= num_epoch
     if len(filename)==0 and (not do_train):
         raise ValueError(f"Evaluation stopped, model not present in the '{MODEL_SAVE_FOLDER}' folder")
     if len(filename)!=0:
-        model= model.load(filename, device=DEVICE)
+        model= model.load_from_pretraining(filename, device=DEVICE) if (load_pretrain) else model.load(filename, device=DEVICE)
         LOGGER.info(f"Loaded '{os.path.basename(filename)}'...")
     
     loss, NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = generate_loss(LOGGER, train_dict, do_train, loss_type, DEVICE)
@@ -546,6 +597,8 @@ def main_test_set():
         eval(test_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
 
 if __name__=='__main__':
+    train_or_eval = train_or_eval_prediction if PRETRAIN else train_or_eval_detection
+    
     if K_FOLD and (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
         raise ValueError("The variables K_FOLD, TEST_PATIENT_IDS, VAL_PATIENT_IDS are not None. Only one can be not None")
     

@@ -1,20 +1,24 @@
 """Contains constant useful to the main functions instad of have a lot of parameters passed in line"""
+from utils.constant.constants_eeg import PRETRAIN
 import os
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # FOLDERS AND FILE NAMES
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-METRICS_SAVE_FOLDER= "./metrics"
+PRETRAIN_SUFFIX= "_pretrain"
+"""Suffix to add if the `PRETRAIN` constant is True"""
+
+METRICS_SAVE_FOLDER= "./metrics{}".format(PRETRAIN_SUFFIX if PRETRAIN else "")
 """Folder where save the metric values"""
 
-MODEL_SAVE_FOLDER= "./weights"
+MODEL_SAVE_FOLDER= "./weights{}".format(PRETRAIN_SUFFIX if PRETRAIN else "")
 """Folder where save the model weights"""
 
 SCALER_SAVE_FOLDER= "./scalers_weight"
 """Folder where save the values calculates with the scalar"""
 
-MODEL_NAME= "Model"
+MODEL_NAME= "Model{}".format(PRETRAIN_SUFFIX if PRETRAIN else "")
 """Name of the file where the model will be saved"""
 
 EPOCH_FOLDER_NAME= "epoch"
