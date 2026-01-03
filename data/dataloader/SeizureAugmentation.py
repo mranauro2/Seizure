@@ -1,4 +1,5 @@
 from data.dataloader.SeizureUtilityType import SampleSeizureData
+from typing_extensions import override
 from abc import ABC, abstractmethod
 from typing import NamedTuple
 import numpy as np
@@ -98,7 +99,7 @@ class SwapChannels(Augmentation):
                 raise ValueError("Channels to swap are identical: ({}) and ({})".format(channel.index_0, channel.index_1))
             self.channels.append(channel)
             
-    
+    @override
     def transform(self, eeg_clip:np.ndarray):
         # function used for the transformation
         def inner_trasformation(eeg_clip:np.ndarray, channel:SwapChannels.Channels):
