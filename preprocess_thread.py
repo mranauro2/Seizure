@@ -138,6 +138,8 @@ def process_segment(args):
                 If True, segment must be completely inside seizure interval to be labeled as overlap
             - patient_id (str):\\
                 Identifier for the patient (typically derived from summary filename)
+            - use_previous_segment (bool):\\
+                Output previous segment info together of overlap flag
         
     :returns out (tuple):
         - str: (output_string) CSV-formatted string with segment information. Format varies <br>
@@ -179,14 +181,14 @@ def process_segment(args):
         if use_previous_segment:
             prev_indexed_filename = f"{name_without_ext}_{str(index-1).zfill(z_fill)}{extention}"
             prev_path = os.path.abspath(os.path.join(output_dir, prev_indexed_filename))
-            output_string = f"{patient_id}, {prev_path}, {new_path}\n"
+            output_string = f"{patient_id}, {prev_path}, {new_path}, {int(overlap)}\n"
         else:
             output_string = f"{patient_id}, {new_path}, {int(overlap)}\n"
     
     # Do not save segment
     else:
         if use_previous_segment:
-            output_string = f"{patient_id}, {name}, {str(index-1).zfill(z_fill)}, {name}, {str(index).zfill(z_fill)}\n"
+            output_string = f"{patient_id}, {name}, {str(index-1).zfill(z_fill)}, {name}, {str(index).zfill(z_fill)}, {int(overlap)}\n"
         else:
             output_string = f"{patient_id}, {name}, {str(index).zfill(z_fill)}, {int(overlap)}\n"
     
@@ -359,7 +361,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_fft",             action='store_true', default=False,       help="Use the Fast Fourier Transform when obtain the slice from the file. Used only if --save_dir is not None")
     parser.add_argument("--overwrite",           action='store_true', default=False,       help="Overwrite existing segment files. If not set, existing files will be skipped")
     parser.add_argument("--partial_overlap",     action='store_true', default=False,       help="If False the overlap must be complete. The interval of the segmented data must be completely inside the seizure event to be labeled as seizure")
-    parser.add_argument("--use_previous_segment",action='store_true', default=False,       help="Output previous segment info instead of overlap flag")
+    parser.add_argument("--use_previous_segment",action='store_true', default=False,       help="Output previous segment info together of overlap flag")
     parser.add_argument("--seq_len",             type=int,            default=4,           help="Length of each segment window in seconds")
     parser.add_argument("--z_fill",              type=int,            default=3,           help="Number of digits for zero-padding segment indices")
     parser.add_argument("--delete",              action='store_true', default=False,       help="Delete the output file if already exists")

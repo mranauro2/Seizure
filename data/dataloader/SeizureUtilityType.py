@@ -16,4 +16,5 @@ class NextTimeData(NamedTuple):
     clip_index:int
     file_name_next:str
     clip_index_next:int
+    has_seizure:int
     augmentation:int=NO_AUGMENTATION

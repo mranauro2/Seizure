@@ -88,14 +88,14 @@ def train_or_eval_prediction(data_loader:DataLoader, model:SGLC_Classifier, pred
     
     # enable or not the gradients
     with (torch.enable_grad() if is_training else torch.no_grad()):
-        for x,target,adj in (tqdm(data_loader, desc=f"{'Train' if model.training else 'Eval'} current epoch", leave=False) if show_progress else data_loader):
+        for x,(x_next,has_seizure),adj in (tqdm(data_loader, desc=f"{'Train' if model.training else 'Eval'} current epoch", leave=False) if show_progress else data_loader):
             x:Tensor= x.to(device=DEVICE)
-            target:Tensor= target.to(device=DEVICE)
+            x_next:Tensor= x_next.to(device=DEVICE)
             adj:Tensor= adj.to(device=DEVICE)
             
             prediction = model.forward(x, adj)
             
-            loss = prediction_loss.compute_loss(prediction, target)
+            loss = prediction_loss.compute_loss(prediction, x_next)
             
             if is_training:
                 optimizer.zero_grad()

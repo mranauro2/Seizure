@@ -185,7 +185,7 @@ class BaseSeizureDataset(Dataset, ABC):
         
         return eeg_clip
 
-    def __getitem__(self, index:int) -> tuple[FloatTensor, FloatTensor, FloatTensor]:
+    def __getitem__(self, index:int):
         """
         Args:
             index (int):    Index in [0, 1, ..., size_of_dataset-1]
@@ -367,9 +367,10 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
     def __init__(self, **kwargs):
         """
         Args:
-            files_record (list[str]):   List of simple files with line records like `(patient_id, file_name, index, file_name_next, index_next)` if `preprocess_data` is None or `(patient_id, file_name, file_name_next)` if `preprocess_data` is not None where
+            files_record (list[str]):   List of simple files with line records like `(patient_id, file_name, index, file_name_next, index_next, bool_value)` if `preprocess_data` is None or `(patient_id, file_name, file_name_next, bool_value)` if `preprocess_data` is not None where
                 - `file_name` and `file_name_next` are the names of a *.npy file
                 - `index` and `index_next` are the numbers which is between `0` and `time_duration_file/max_seq_len`
+                - `bool_value` is `0` or `1` and corrispond to the absence or presence of a seizure
         
         See:
         ----
@@ -388,17 +389,18 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
             with open(file, "r") as f:
                 try:
                     for line in f.readlines():
-                        patient_id, file_name, index, file_name_next, index_next = line.split(",")
+                        patient_id, file_name, index, file_name_next, index_next, has_seizure = line.split(",")
                         data.append(NextTimeData(
                             patient_id      = patient_id.strip(),
                             file_name       = file_name.strip(),
                             clip_index      = int(index.strip()),
                             file_name_next  = file_name_next.strip(),
-                            clip_index_next = int(index_next.strip())
+                            clip_index_next = int(index_next.strip()),
+                            has_seizure     = int(has_seizure.strip())
                         ))
                 except ValueError as e:
                     if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack"):
-                        e = ValueError("Expected format 'str, str, int, str, int' for each line of file {}".format(file))
+                        e = ValueError("Expected format 'str, str, int, str, int, int' for each line of file {}".format(file))
                     raise e
                 
         # case preprocess_data not None
@@ -406,33 +408,34 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
             with open(file, "r") as f:
                 try:
                     for line in f.readlines():
-                        patient_id, file_name, file_name_next = line.split(",")
+                        patient_id, file_name, file_name_next, has_seizure = line.split(",")
                         data.append(NextTimeData(
                             patient_id      = patient_id.strip(),
                             file_name       = file_name.strip(),
                             clip_index      = None,
                             file_name_next  = file_name_next.strip(),
-                            clip_index_next = None
+                            clip_index_next = None,
+                            has_seizure     = int(has_seizure.strip())
                         ))
                 except ValueError as e:
-                    if str(e).startswith("not enough values to unpack"):
-                        e = ValueError("Expected format 'str, str, str' for each line of file {}".format(file))
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack"):
+                        e = ValueError("Expected format 'str, str, str, int' for each line of file {}".format(file))
                     raise e
         
         return data
     
     @override
-    def _generate_targets_dict(self, file_info:list[NextTimeData]) -> dict[str, list[str]]:
+    def _generate_targets_dict(self, file_info:list[NextTimeData]) -> dict[str, list[int]]:
         """Generate variable used in the `targets_dict` function"""
         targets= defaultdict(list)
         for info in file_info:
-            targets[info.patient_id].append(info.file_name_next)
+            targets[info.patient_id].append(info.has_seizure)
         
         return targets
     
     @override
-    def targets_dict(self) -> dict[str, list[str]]:
-        """Returns target labels organized by patient where the key is the patient ID and the value is a list of files for each sample belonging to that patient"""
+    def targets_dict(self) -> dict[str, list[int]]:
+        """Returns target labels organized by patient where the key is the patient ID and the value is a list of binary labels (0 or 1) for each sample belonging to that patient"""
         return self._targets
     
     def targets_index_map(self) -> dict[str, list[int]]:
@@ -446,7 +449,7 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
     def _build_target(self, sample:NextTimeData):
         eeg_clip_next = self._load_clip(sample.file_name_next, sample.clip_index_next)
         eeg_clip_next = self._apply_scaler(eeg_clip_next)
-        return torch.FloatTensor(eeg_clip_next)
+        return torch.FloatTensor(eeg_clip_next), torch.FloatTensor([sample.has_seizure])
         
     @override
     def __getitem__(self, index:int):
