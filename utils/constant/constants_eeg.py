@@ -3,6 +3,7 @@ from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 from model.Transformer.PositionalEncoding import PositionalEncodingType
 from model.Transformer.TransformerType import TransformerType
 from data.dataloader.SeizureAugmentation import *
+import numpy as np
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # UTILS INFO
@@ -40,10 +41,22 @@ TOP_K= None
 """Used in :data:`data.dataloader.SeizureDataset` \\
 Maintain only the `top_k` higher value when compute the adjacency matrix"""
 
+interval_scale = [0.8, 1.2]
+interval_scale = [np.log(interval_scale[0]), np.log(interval_scale[1])] if USE_FFT else interval_scale
+operation = '+' if USE_FFT else '*'
+
 seed = 1559
 classes_to_use = [True]
 AUGMENTATIONS = [
-    SwapChannels(labels=classes_to_use, seed=seed, p=0.0, channels_to_swap=[(0,1)])
+    SwapFixedChannels(
+        labels=classes_to_use, seed=seed, p=0.0, channels_to_swap=[(0,1)]
+    ),
+    SwapRandomChannels(
+        labels=classes_to_use, seed=seed, p=0.0, num_channels=3
+    ),
+    Scale(
+        labels=classes_to_use, seed=seed, p=0.0, interval=interval_scale, operation=operation
+    )
 ]
 """Used in :data:`data.dataloader.SeizureDataset` \\
 Set the augmentation to use inside the dataset"""
