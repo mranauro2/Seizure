@@ -388,3 +388,29 @@ class SGLC_Classifier(nn.Module):
         model.load_state_dict(checkpoint['model_state_dict'])
         
         return model
+    
+    def load_from_pretraining(self, pretrained_path:str, device:str=None):
+        """
+        Load encoder weights from a pretrained model and initialize fine-tuning components
+        
+        Args:
+            pretrained_path (str):      Path to the pretrained model file
+            device (str):               Device to place the model on. If None, uses the device from saved config
+        
+        Returns:
+            SGLCModel_classification:   Returns itself (modifies self in-place)
+        """
+        if not os.path.exists(pretrained_path):
+            raise FileNotFoundError(f"Pretrained model file not found: {pretrained_path}")
+        
+        # Load pretrained checkpoint
+        checkpoint = torch.load(pretrained_path, map_location=device or self.device)
+        pretrained_state = checkpoint['model_state_dict']
+        
+        # Extract only encoder weights
+        encoder_state = {key.replace('encoder.', ''):value for key,value in pretrained_state.items() if key.startswith('encoder.')}
+        
+        # Load encoder weights
+        self.encoder.load_state_dict(encoder_state, strict=True)
+
+        return self
