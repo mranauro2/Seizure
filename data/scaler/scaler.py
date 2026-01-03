@@ -145,6 +145,8 @@ class MinMaxScaler(Scaler):
             batch_size (int):                               Number of samples to process at once
             num_workers (int):                              Number of subprocesses for data loading
         """
+        if ( len(dataset)==0 ):
+            raise ValueError("The dataset is empty")
         device= device if (device is not None) else self.device
         dataloader = DataLoader(dataset, batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device=='cuda'))
         
@@ -153,7 +155,7 @@ class MinMaxScaler(Scaler):
         if single_value:
             min_array = torch.tensor([float('+inf')])
             max_array = torch.tensor([float('-inf')])
-        else:            
+        else:
             first_data = func_operation(next(iter(dataloader))[dataset_data_index])
             num_features = first_data.size(0)
             min_array = torch.full((num_features,1), float('+inf'))
