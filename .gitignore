@@ -221,3 +221,4 @@ model_flow.ipynb
 torchview_flow.ipynb
 utils/rename_all.py
 transformer.ipynb
+utils/mean_max_epochs.ipynb
