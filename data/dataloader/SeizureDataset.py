@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from torch import Tensor
+from torch import Tensor, FloatTensor
 import torch
 
 from typing_extensions import override
@@ -185,7 +185,7 @@ class BaseSeizureDataset(Dataset, ABC):
         
         return eeg_clip
 
-    def __getitem__(self, index:int):
+    def __getitem__(self, index:int) -> tuple[FloatTensor, FloatTensor, FloatTensor]:
         """
         Args:
             index (int):    Index in [0, 1, ..., size_of_dataset-1]
@@ -320,7 +320,7 @@ class SeizureDatasetDetection(BaseSeizureDataset):
         return patient_to_indices
 
     @override
-    def _build_target(self, sample:SampleSeizureData) -> Tensor:
+    def _build_target(self, sample:SampleSeizureData):
         return torch.FloatTensor([sample.has_seizure])
     
     @override
@@ -443,7 +443,7 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
         return patient_to_indices
 
     @override
-    def _build_target(self, sample:NextTimeData) -> Tensor:
+    def _build_target(self, sample:NextTimeData):
         eeg_clip_next = self._load_clip(sample.file_name_next, sample.clip_index_next)
         eeg_clip_next = self._apply_scaler(eeg_clip_next)
         return torch.FloatTensor(eeg_clip_next)
