@@ -264,11 +264,11 @@ class SGLC_Classifier(nn.Module):
         """Process input according to the transformer and last fully connected layer using the `self.forward` parameters"""
         if (self.transf is not None):
             input_clone = input_seq.clone()
-            # Reshape: (seq_length, batch_size, num_nodes, input_dim) --> (batch_size, seq_length*num_nodes, input_dim)
+            # Reshape: (batch_size, sequential_length, num_nodes, input_dim) --> (batch_size, seq_length*num_nodes, input_dim)
             input_clone = input_clone.reshape(input_clone.size(0), -1, input_clone.size(-1))
             last_feature = self.transf(input_clone)
         else:
-            last_feature = input_seq[-1]
+            last_feature = input_seq[:, -1, :, :]
         
         features_mean= last_feature.reshape(last_feature.size(0), -1)
         result = self.fc(features_mean)
@@ -351,10 +351,15 @@ class SGLC_Classifier(nn.Module):
         """
         def _from_value_to_type(key:str, value:any, value_class:type):    
             """Check if a `value` is different from its original class. If yes try to modified it. If it cannot, raise a TypeError. It is the opposite of `_from_type_to_value`"""
+            if (value_class==NoneType) and not(isinstance(value, NoneType)):
+                raise TypeError("Key '{}' is found None in the model, change it".format(key))
+            
             if isinstance(value, value_class):
                 return value
             if issubclass(value_class, Enum) and isinstance(value, str):
                 return value_class[value]
+            if isinstance(value, NoneType):
+                return None
             raise TypeError("Key '{}' cannot be converted".format(key))
         
         if not os.path.exists(filepath):
