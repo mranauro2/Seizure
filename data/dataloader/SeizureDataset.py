@@ -271,7 +271,7 @@ class SeizureDatasetDetection(BaseSeizureDataset):
                             has_seizure = bool(int(has_seizure.strip()))
                         ))
                 except ValueError as e:
-                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack"):
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack"):
                         e = ValueError("Expected format 'str, str, int, bool' for each line of file {}".format(file))
                     raise e
                 
@@ -288,7 +288,7 @@ class SeizureDatasetDetection(BaseSeizureDataset):
                             has_seizure = bool(int(has_seizure.strip()))
                         ))
                 except ValueError as e:
-                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack"):
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack"):
                         e = ValueError("Expected format 'str, str, bool' for each line of file {}".format(file))
                     raise e
         
@@ -399,7 +399,7 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
                             has_seizure     = int(has_seizure.strip())
                         ))
                 except ValueError as e:
-                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack"):
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack"):
                         e = ValueError("Expected format 'str, str, int, str, int, int' for each line of file {}".format(file))
                     raise e
                 
@@ -418,7 +418,7 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
                             has_seizure     = int(has_seizure.strip())
                         ))
                 except ValueError as e:
-                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack"):
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack"):
                         e = ValueError("Expected format 'str, str, str, int' for each line of file {}".format(file))
                     raise e
         
