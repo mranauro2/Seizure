@@ -212,6 +212,9 @@ test_2.ipynb
 metrics/
 others/
 images/
+model/loss/OK
+model/loss/results
+model/loss/results_norm
 not_used/
 PositionalEncoding2D-master/
 utils/plot_scaler.ipynb
@@ -222,3 +225,4 @@ torchview_flow.ipynb
 utils/rename_all.py
 transformer.ipynb
 utils/mean_max_epochs.ipynb
+patient_specific.ipynb
