@@ -3,13 +3,15 @@ import numpy as np
 
 class KNNMetric:
     """Computes k-NN classification accuracy"""
-    def __init__(self, k:int=5, metric:str='cosine'):
+    def __init__(self, k:int=5, metric:str='manhattan'):
         """
         Computes k-NN classification accuracy to evaluate representation quality
         
         Args:
             k (int):        Number of nearest neighbors
-            metric (str):   Distance metric ('cosine', 'euclidean', 'manhattan', etc.)
+            metric (str):   Distance metric ('cosine', 'euclidean', 'manhattan', etc.).
+                            See the documentation of `scipy.spatial.distance <https://docs.scipy.org/doc/scipy/reference/spatial.distance.html>`_ and
+                            the metrics listed in :class:`~sklearn.metrics.pairwise.distance_metrics` for valid metric values
         """
         self.k = k
         self.metric = metric
