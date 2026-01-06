@@ -147,10 +147,13 @@ class BaseSeizureDataset(Dataset, ABC):
         """Given a simple file returns the file informations according to the concrete class"""
         raise NotImplementedError("This is an abstract function of an abstract class")
 
-    @abstractmethod
-    def _generate_targets_dict(self, file_info:list) -> dict[str,list[Any]]:
+    def _generate_targets_dict(self, file_info:list[SampleSeizureData]|list[NextTimeData]) -> dict[str, list[int]]:
         """Generate variable used in the `targets_dict` function"""
-        raise NotImplementedError("This is an abstract function of an abstract class")
+        targets= defaultdict(list)
+        for info in file_info:
+            targets[info.patient_id].append(info.has_seizure)
+        
+        return targets
 
     @abstractmethod
     def _build_target(self, sample:np.ndarray) -> Tensor:
@@ -293,15 +296,6 @@ class SeizureDatasetDetection(BaseSeizureDataset):
                     raise e
         
         return data
-    
-    @override
-    def _generate_targets_dict(self, file_info:list[SampleSeizureData]) -> dict[str, list[int]]:
-        """Generate variable used in the `targets_dict` function"""
-        targets= defaultdict(list)
-        for info in file_info:
-            targets[info.patient_id].append(info.has_seizure)
-        
-        return targets
 
     @override
     def targets_dict(self) -> dict[str, list[int]]:
@@ -423,16 +417,7 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
                     raise e
         
         return data
-    
-    @override
-    def _generate_targets_dict(self, file_info:list[NextTimeData]) -> dict[str, list[int]]:
-        """Generate variable used in the `targets_dict` function"""
-        targets= defaultdict(list)
-        for info in file_info:
-            targets[info.patient_id].append(info.has_seizure)
-        
-        return targets
-    
+
     @override
     def targets_dict(self) -> dict[str, list[int]]:
         """Returns target labels organized by patient where the key is the patient ID and the value is a list of binary labels (0 or 1) for each sample belonging to that patient"""
