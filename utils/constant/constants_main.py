@@ -40,14 +40,17 @@ MODEL_PARTIAL_PATH= os.path.join(MODEL_SAVE_FOLDER, MODEL_NAME)
 TEST_PATIENT_IDS= None
 """List of ids of patients to use for test"""
 
-VAL_PATIENT_IDS= ["chb10", "chb13", "chb14"]
+VAL_PATIENT_IDS= None # ["chb10", "chb13", "chb14"]
 """List of ids of patients to use fot valdidation"""
 
 EXCEPT_DATA= ["chb16"]
 """List of ids of patient which are not allowed to be in the dataset"""
 
-K_FOLD= 0
+K_FOLD= 3
 """Number of patients to use for each fold in the k-fold cross validation""" 
+
+PATIENT_SPECIFIC= "chb01"
+"""Patient specific to use for a k-fold training"""
 
 PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""

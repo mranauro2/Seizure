@@ -238,7 +238,7 @@ def split_patient_data(
         verbose: bool = False
     ) -> tuple[dict[str, list[int]], dict[str, list[int]]]:
     """
-    Split patient data in train and validation to maintain positive/negative ratio using optimized search
+    Split patients data in train and validation to maintain positive/negative ratio using optimized search
     
     Args:
         patient_data (dict[str,list[int]]): Dictionary with patient_id as key and list of labels of integers as value. If the list if not of int it will anyway accepted but not maintain positive/negative ratio
@@ -528,6 +528,95 @@ def split_patient_data_specific(patient_data:dict[str,Any], patient_ids:list[str
         raise ValueError("No values in patient_ids are not found in patient_data. Result set is empty.\nPatient_ids : {}".format(", ".join(patient_ids)))
 
     return patient_data, set_data
+
+def patient_specific_k_fold(indices:list[int], y_bool:list[bool], k:int, train_ratio:float=0.8) -> list[dict[str,list[int]]]:
+    """
+    K-fold over a single patient, preserving seizure ratio in train/val/test
+
+    Args:
+        indices (list[int]):    List of indices
+        y_bool (list[bool]):    List of True/False value to indicate seizure/non-seizure events
+        k (int):                Number of folds
+        train_ratio (float):    Proportion of remaining data to assigned to train
+
+    Returns:
+        folds (list[dict]):     Each fold is a dict with the keys "train", "val", "test". Each key has as value a list of indices
+    """
+    # --- Separate positions by class (not the dataset indices, but positions)
+    pos_positions = [i for i, y in enumerate(y_bool) if y]
+    neg_positions = [i for i, y in enumerate(y_bool) if not y]
+    
+    # Helper: compute step logic for a class list
+    def build_chunks(position_list:list[int]):
+        length = len(position_list)
+        if length == 0:
+            return [], 0
+
+        step = length // k
+        num_chunks = k
+    
+        chunks = []
+        for idx in range(num_chunks):
+            start = idx*step
+            stop = (idx+1)*step if (idx!=num_chunks-1) else length
+            chunks.append(position_list[start:stop])
+
+        return chunks
+
+    pos_chunks = build_chunks(pos_positions)
+    neg_chunks = build_chunks(neg_positions)
+    
+    folds = []
+
+    for fold_idx in range(k):
+        # --- TEST sets (classwise, then merged)
+        test_pos = pos_chunks[fold_idx]
+        test_neg = neg_chunks[fold_idx]
+
+        test_positions = set(test_pos + test_neg)
+
+        # --- Remaining positions (classwise)
+        remaining_pos = [p for p in pos_positions if p not in test_positions]
+        remaining_neg = [p for p in neg_positions if p not in test_positions]
+
+        # --- Split remaining into train/val PER CLASS
+        def split_train_val(lst:list[int]):
+            cutoff = int(len(lst) * train_ratio)
+            return lst[:cutoff], lst[cutoff:]
+
+        train_pos, val_pos = split_train_val(remaining_pos)
+        train_neg, val_neg = split_train_val(remaining_neg)
+
+        train_positions = train_pos + train_neg
+        val_positions = val_pos + val_neg
+
+        folds.append(
+            {
+                "train": [indices[i] for i in train_positions],
+                "val": [indices[i] for i in val_positions],
+                "test": [indices[i] for i in test_positions]
+            }
+        )
+
+    return folds
+
+def dict_from_indices(patient_id:str, patient_data:dict[str,list[int]], patient_to_indices:dict[str,list[int]], indices:list[int]):
+    """
+    Used for the training with a single patient. Given a list of indices it returns a dict of labels
+    
+    Args:
+        patient_id (str):                           Patient id to retrieve from the dictionaries
+        patient_data (dict[str,list[int]]):         Dictionary with patient_id as key and list of labels of integers as value
+        patient_to_indices (dict[str,list[int]]):   Dictionary with patient_id as key and list of indeces as value (from original dataset)
+        indices (list[int]):                        List of indices to generate the list of labels
+    
+    Returns:
+        out (dict[str, list[int]]):                 Dictionary with patient_id as key and list of labels for the given indices
+    """
+    all_labels = patient_data[patient_id]
+    index_mapping = patient_to_indices[patient_id]
+    split_labels = [all_labels[index_mapping.index(idx)] for idx in indices]
+    return {patient_id: split_labels}
 
 def subsets_from_patient_splits(dataset:Dataset, patient_to_indices:dict[str,list[int]], set_splitted:dict[str,list[int]]) -> Subset:
     """

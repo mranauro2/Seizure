@@ -133,7 +133,7 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     average_total    = Loss_Meter()
     accuracy         = Accuracy_Meter([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA], num_classes=NUM_CLASSES)
     conf_matrix      = ConfusionMatrix_Meter(NUM_CLASSES)
-    
+     
     # enable or not the gradients
     with (torch.enable_grad() if is_training else torch.no_grad()):
         for x,target,adj in (tqdm(data_loader, desc=f"{'Train' if model.training else 'Eval'} current epoch", leave=False) if show_progress else data_loader):
@@ -390,6 +390,117 @@ def train(
 # MAIN
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+def main_k_fold_patient_specific():
+    """Main to evaluate the performance with k-fold cross validation using a single subject"""
+    loss_type, input_dir, files_record, method, lambda_value, scaler_type, single_scaler, save_num, do_train, load_pretrain, num_epochs, verbose, preprocess_dir = parse_arguments()
+    if (load_pretrain):
+        raise NotImplementedError("load_pretrain using k-fold validation is not implemented")
+    dataset:SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
+    
+    if (PATIENT_SPECIFIC) not in dataset.targets_dict().keys():
+        raise ValueError("Patient {} not exists in the dataset. The available patients are '{}'".format(PATIENT_SPECIFIC, "', '".join(dataset.targets_dict().keys())))
+    _, data_dict = split_patient_data_specific(dataset.targets_dict(), [PATIENT_SPECIFIC])
+    
+    k_fold = patient_specific_k_fold(
+        indices     = dataset.targets_index_map()[PATIENT_SPECIFIC],
+        y_bool      = data_dict[PATIENT_SPECIFIC],
+        k           = K_FOLD,
+        train_ratio = PERCENTAGE_TRAINING_SPLIT
+    )
+    
+    names= ["test", "train", "val"]
+    ljust_value= (max([len(name) for name in names]))
+    for index,fold in enumerate(k_fold):        
+        string = ""
+        string+= "Fold number {}".format(index+1)
+        for name in names:
+            pos, neg = pos_neg_samples(dict_from_indices(PATIENT_SPECIFIC, dataset.targets_dict(), dataset.targets_index_map(), fold[name]))
+            tot = pos+neg
+            string+= "\n\tFor {} : positive/negative samples are {:>{}}/{:>{}} (total {}). The positive ratio is {:.3f}%".format(name.ljust(ljust_value), pos, len(str(tot)), neg, len(str(tot)), tot, 100*pos/tot)
+        LOGGER.info(string+"\n")
+    
+    # global variables
+    global DEVICE, START_EPOCH, NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA
+    
+    # print some informations
+    DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
+    LOGGER.info(f"Using {DEVICE} device...")
+    if (MIN_SAMPLER_PER_BATCH != 0):
+        LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
+    if (scaler_type is not None):
+        LOGGER.info(f"Loading scaler '{scaler_type.name}'...")
+    _ = generate_loss(LOGGER, data_dict, do_train, loss_type, DEVICE)
+    LOGGER.info("To stop the execution create the file '{}' in the current folder".format(os.path.basename(STOP_FILE)))
+    
+    # training at most MAX_NUM_EPOCHS iterative for each fold
+    print_info = True
+    epoch_interrupted = False
+    total_training = ( num_epochs // MAX_NUM_EPOCHS ) + int( num_epochs % MAX_NUM_EPOCHS != 0 )    
+    LOGGER.info(f'Start training : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
+    
+    for index in TqdmMinutesAndHours(range(1, total_training+1), desc="Iteration"):
+        current_epochs = MAX_NUM_EPOCHS if (index*MAX_NUM_EPOCHS <= num_epochs) else (num_epochs % MAX_NUM_EPOCHS)
+        
+        # for train_dict,val_dict in TqdmMinutesAndHours(k_fold, desc="K-Fold", leave=False):
+        for fold_index,fold in TqdmMinutesAndHours(enumerate(k_fold), total=len(k_fold), desc="K-Fold", leave=False):
+            
+            train_indices = fold["train"]
+            val_indices   = fold["val"]
+            test_indices  = fold["test"]
+            
+            train_set = Subset(dataset, train_indices)
+            val_set = Subset(dataset, val_indices)
+            test_set = Subset(dataset, test_indices)
+            
+            # generating new scaler
+            scaler = scaler_load_and_save(None, scaler_type, single_scaler, None, train_set, device='cpu')
+            if (scaler is not None):
+                dataset.scaler= scaler
+            
+            # generate dataloaders
+            train_sampler = None
+            if (MIN_SAMPLER_PER_BATCH != 0):
+                train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+
+            train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
+            val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
+            test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
+            
+            # load model if exists or create a new model            
+            model= generate_model(dataset, DEVICE)
+            
+            filename, num_epoch = get_model(os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_({fold_index})"), specific_num=save_num)
+            
+            START_EPOCH= num_epoch
+            if len(filename)==0 and (not do_train):
+                raise ValueError(f"Evaluation stopped, model not present in the '{MODEL_SAVE_FOLDER}' folder")
+            if len(filename)!=0:
+                model= model.load(filename, device=DEVICE)
+                
+            train_dict = dict_from_indices(PATIENT_SPECIFIC, dataset.targets_dict(), dataset.targets_index_map(), train_indices)
+            loss, NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA = generate_loss(None, train_dict, do_train, loss_type, DEVICE)
+            
+            # start train or evaluation
+            if do_train:
+                optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)                
+                interrupt = train(
+                                    train_loader, val_loader, test_loader,
+                                    model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=current_epochs,
+                                    verbose=False, evaluation_verbose=False,
+                                    show_progress=True, show_inner_progress="first" if print_info else False,
+                                    folder_number=f"({fold_index})"
+                                )
+                print_info = False
+                epoch_interrupted = (epoch_interrupted and interrupt)
+            else:
+                raise NotImplementedError("Evaluation method with k-fold is not implemented yet")
+            
+        if epoch_interrupted:
+            LOGGER.warning(f"Interruption detected after completing epoch for all folds")
+            break
+
+    LOGGER.info(f'Stop training  : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
+
 def main_k_fold():
     """Main to evaluate the performance with k-fold cross validation"""
     # take input from command line and print some informations
@@ -408,7 +519,7 @@ def main_k_fold():
     
     # print on screen some informations    
     names= ["train", "validation"]
-    ljust_value= len(max(names))
+    ljust_value= (max([len(name) for name in names]))
     
     for index,item in enumerate(k_fold):
         string = ""
@@ -551,7 +662,7 @@ def main_test_set():
     # print on screen some informations
     names= ["test", "train", "validation"]
     dictionaries= [test_dict, train_dict, val_dict]
-    ljust_value= len(max(names))
+    ljust_value= (max([len(name) for name in names]))
     
     for name,dictionary in zip(names,dictionaries):
         if (dictionary is None):
@@ -599,10 +710,20 @@ def main_test_set():
 if __name__=='__main__':
     train_or_eval = train_or_eval_prediction if PRETRAIN else train_or_eval_detection
     
-    if K_FOLD and (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
-        raise ValueError("The variables K_FOLD, TEST_PATIENT_IDS, VAL_PATIENT_IDS are not None. Only one can be not None")
+    # errors
+    if (PRETRAIN) and (PATIENT_SPECIFIC):
+        raise ValueError("Cannot be use self-supervised mode using 'PATIENT_SPECIFIC")
+    if (PATIENT_SPECIFIC) and not(K_FOLD):
+        raise ValueError("'PATIENT_SPECIFIC' is set but 'K_FOLD' is not")
+    if (K_FOLD) and (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
+        raise ValueError("The variables 'K_FOLD' is not None. Cannot be not None also 'TEST_PATIENT_IDS' and 'VAL_PATIENT_IDS'. Only one pack can be not None")
     
-    if K_FOLD:
+    # execution
+    if PATIENT_SPECIFIC:
+        LOGGER.info("Execution with k-fold cross validation with only one patient\n")
+        main_k_fold_patient_specific()
+        
+    elif K_FOLD:
         LOGGER.info("Execution with k-fold cross validation\n")
         main_k_fold()
         
