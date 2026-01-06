@@ -21,6 +21,11 @@ from model.SGLClassifier import SGLC_Classifier
 from model.loss.loss_regularization import *
 from model.loss.loss_classes import *
 
+from model.loss.latent_space.EmbeddingVisualizer import EmbeddingVisualizer
+from model.loss.latent_space.TSNEProjector import TSNEProjector
+from model.loss.latent_space.Reducer import FeatureReducer
+from model.loss.latent_space.KNNMetric import KNNMetric
+
 from train_args import parse_arguments
 
 from datetime import datetime
@@ -48,6 +53,7 @@ def generate_id(char_num:int, chars:str=string.ascii_lowercase+string.digits):
 STOP_FILE = "./stop_execution_{}.txt".format(generate_id(3))
 """Stop file to use to stop the execution and save the model without wait the checkpoint"""
 
+REDUCER:FeatureReducer= None
 DEVICE= "cpu"
 NUM_SEIZURE_DATA= 0
 NUM_NOT_SEIZURE_DATA= 0
@@ -84,7 +90,10 @@ def train_or_eval_prediction(data_loader:DataLoader, model:SGLC_Classifier, pred
     model.train(is_training)
     
     # init metrics
+    global REDUCER
     average_total = Loss_Meter()
+    k_nn          = KNNMetric()
+    REDUCER       = FeatureReducer()
     
     # enable or not the gradients
     with (torch.enable_grad() if is_training else torch.no_grad()):
@@ -93,9 +102,9 @@ def train_or_eval_prediction(data_loader:DataLoader, model:SGLC_Classifier, pred
             x_next:Tensor= x_next.to(device=DEVICE)
             adj:Tensor= adj.to(device=DEVICE)
             
-            prediction = model.forward(x, adj)
+            encoder_output, decoder_output = model.forward(x, adj)
             
-            loss = prediction_loss.compute_loss(prediction, x_next)
+            loss = prediction_loss.compute_loss(decoder_output, x_next)
             
             if is_training:
                 optimizer.zero_grad()
@@ -103,11 +112,14 @@ def train_or_eval_prediction(data_loader:DataLoader, model:SGLC_Classifier, pred
                 optimizer.step()
             
             average_total.update(loss.unsqueeze(0))
+            REDUCER.add_feature(encoder_output, has_seizure)
     
     model.eval()
     
+    k_nn_dict = k_nn.compute_accuracy(REDUCER.get_features(), REDUCER.get_labels(), NUM_WORKERS)
     metrics= [
-        average_total.get_metric()
+        average_total.get_metric(),
+        *list(k_nn_dict.items())
     ]
     
     # print metrics during execution
@@ -126,6 +138,7 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     model.train(is_training)
     
     # init metrics
+    global REDUCER
     average_smooth   = Loss_Meter("smooth")   if (DAMP_SMOOTH!=0)   else None
     average_degree   = Loss_Meter("degree")   if (DAMP_DEGREE!=0)   else None
     average_sparsity = Loss_Meter("sparsity") if (DAMP_SPARSITY!=0) else None
@@ -133,6 +146,7 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     average_total    = Loss_Meter()
     accuracy         = Accuracy_Meter([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA], num_classes=NUM_CLASSES)
     conf_matrix      = ConfusionMatrix_Meter(NUM_CLASSES)
+    REDUCER          = FeatureReducer()
      
     # enable or not the gradients
     with (torch.enable_grad() if is_training else torch.no_grad()):
@@ -165,6 +179,7 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
             average_total.update(total_loss)
             accuracy.update(result, target)
             conf_matrix.update(result, target)
+            REDUCER.add_feature(node_matrix, target)
             
             loss_tuple:list[tuple[Loss_Meter,Tensor]]=[
                 (average_pred,     loss_pred),
@@ -364,6 +379,12 @@ def train(
             file_path= f"{MODEL_PARTIAL_PATH}_{epoch_num+START_EPOCH+1}.{MODEL_EXTENTION}"            
             saved_files.append(file_path)
             model.save(file_path)
+            
+            # save also an image of the dataset t-SNE projection
+            tsne_projected = TSNEProjector().project(REDUCER.get_features(), NUM_WORKERS)
+            intermediate = f"{folder_number}" if K_FOLD else ""
+            tsne_path = os.path.join(TSNE_SAVE_FOLDER, intermediate, f"{TSNE_NAME}_{epoch_num+START_EPOCH+1}")
+            EmbeddingVisualizer.plot(tsne_projected, REDUCER.get_labels(), title="T-SNE", show=False, save_path=tsne_path, dpi=250)
             
             checkpoint_observer.update_saving(used_metric, saved_files)
         

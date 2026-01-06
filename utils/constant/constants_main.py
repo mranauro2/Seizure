@@ -15,6 +15,9 @@ METRICS_SAVE_FOLDER= "./metrics{}".format(PRETRAIN_SUFFIX if PRETRAIN else "")
 MODEL_SAVE_FOLDER= "./weights{}".format(PRETRAIN_SUFFIX if PRETRAIN else "")
 """Folder where save the model weights"""
 
+TSNE_SAVE_FOLDER= "./t-SNE"
+"""Folder where the t-SNE projection will be saved"""
+
 SCALER_SAVE_FOLDER= "./scalers_weight"
 """Folder where save the values calculates with the scalar"""
 
@@ -23,6 +26,9 @@ MODEL_NAME= "Model{}".format(PRETRAIN_SUFFIX if PRETRAIN else "")
 
 EPOCH_FOLDER_NAME= "epoch"
 """Name of the folder where the metrics will be saved"""
+
+TSNE_NAME= "t-SNE"
+"""Name of the t-SNE projection file where the image will be saved"""
 
 MODEL_EXTENTION= "pth"
 """Extention of the model weights"""
