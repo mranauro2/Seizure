@@ -469,7 +469,7 @@ def main_k_fold_patient_specific():
             # load model if exists or create a new model            
             model= generate_model(dataset, DEVICE)
             
-            filename, num_epoch = get_model(os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_({fold_index})"), specific_num=save_num)
+            filename, num_epoch = get_model(os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_{str(fold_index+1).zfill(2)}"), specific_num=save_num)
             
             START_EPOCH= num_epoch
             if len(filename)==0 and (not do_train):
@@ -488,7 +488,7 @@ def main_k_fold_patient_specific():
                                     model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=current_epochs,
                                     verbose=False, evaluation_verbose=False,
                                     show_progress=True, show_inner_progress="first" if print_info else False,
-                                    folder_number=f"({fold_index})"
+                                    folder_number=str(fold_index+1).zfill(2)
                                 )
                 print_info = False
                 epoch_interrupted = (epoch_interrupted and interrupt)
