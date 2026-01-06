@@ -21,7 +21,7 @@ from model.SGLClassifier import SGLC_Classifier
 from model.loss.loss_regularization import *
 from model.loss.loss_classes import *
 
-from model.loss.latent_space.EmbeddingVisualizer import EmbeddingVisualizer
+from model.loss.latent_space.EmbeddingVisualizer import EmbeddingVisualizer, BackgroundColorsMethod
 from model.loss.latent_space.TSNEProjector import TSNEProjector
 from model.loss.latent_space.Reducer import FeatureReducer
 from model.loss.latent_space.KNNMetric import KNNMetric
@@ -384,7 +384,7 @@ def train(
             tsne_projected = TSNEProjector().project(REDUCER.get_features(), NUM_WORKERS)
             intermediate = f"{folder_number}" if K_FOLD else ""
             tsne_path = os.path.join(TSNE_SAVE_FOLDER, intermediate, f"{TSNE_NAME}_{epoch_num+START_EPOCH+1}")
-            EmbeddingVisualizer.plot(tsne_projected, REDUCER.get_labels(), title="T-SNE", show=False, save_path=tsne_path, dpi=250)
+            EmbeddingVisualizer.plot(tsne_projected, REDUCER.get_labels(), title="T-SNE", show=False, background=BackgroundColorsMethod.GRID, save_path=tsne_path, dpi=250)
             
             checkpoint_observer.update_saving(used_metric, saved_files)
         

@@ -1,9 +1,20 @@
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
+from enum import Enum, auto
+
+from matplotlib.colors import ListedColormap
+from scipy.spatial import Voronoi, distance
 
 import numpy as np
 import warnings
 import os
+
+class BackgroundColorsMethod(Enum):
+    """Method to colours the background of the plot"""
+    VORONOI = auto()
+    """Create polygons around each point"""
+    GRID = auto()
+    """Create a dense grid and interpolate class labels"""
 
 class EmbeddingVisualizer:
     """Handles saving, loading, and plotting of embedding projections using matplotlib"""
@@ -48,26 +59,29 @@ class EmbeddingVisualizer:
         return arrays['projected'],  arrays['labels']
     
     @staticmethod
-    def plot(projected:np.ndarray, labels:np.ndarray, title:str, show:bool=True, save_path:str=None, dpi:int=150):
+    def plot(projected:np.ndarray, labels:np.ndarray, title:str, show:bool=True, background:BackgroundColorsMethod=None, save_path:str=None, dpi:int=150):
         """
         Create matplotlib visualization of embeddings. For 2D embeddings a single scatter plot is shown.
         For 3D or higher, a grid of pairwise 2D scatter plots is produced (upper-triangle layout, correlation-matrix style)
         
         Args:
-            projected (np.ndarray): Projected features of shape (num_samples, 2) or (num_samples, 3)
-            labels (np.ndarray):    Labels of shape (num_samples,)
-            title (str):            Title of the plot
-            show (bool):            If True, display the plot
-            save_path (str):        If provided, save the figure to this path
-            dpi (int):              Resolution for saved figure
+            projected (np.ndarray):                 Projected features of shape (num_samples, 2) or (num_samples, 3)
+            labels (np.ndarray):                    Labels of shape (num_samples,)
+            title (str):                            Title of the plot
+            show (bool):                            If True, display the plot
+            background (BackgroundColorsMethod):    If set, add background coloring to show class regions
+            save_path (str):                        If provided, save the figure to this path
+            dpi (int):                              Resolution for saved figure
         """
-        ALPHA = 0.7
-        MARKER_SIZE = 20
+        ALPHA = 1.0
+        MARKER_SIZE = 25
 
         _, n_components = projected.shape
 
         if n_components < 2:
             raise ValueError(f"Need at least 2 components to plot, got {n_components}")
+        if (background is not None) and not(isinstance(background, BackgroundColorsMethod)):
+            raise ValueError(f"background must be BackgroundColorsMethod, got {type(background)}")
 
         unique_labels = np.unique(labels)
 
@@ -76,9 +90,10 @@ class EmbeddingVisualizer:
             fig = plt.figure(figsize=(11, 11))
             ax = fig.add_subplot(111)
 
+            colors_used = []
             for label in unique_labels:
                 mask = (labels == label)
-                ax.scatter(
+                scatter= ax.scatter(
                     projected[mask, 0],
                     projected[mask, 1],
                     alpha=ALPHA,
@@ -87,6 +102,53 @@ class EmbeddingVisualizer:
                     edgecolors='white',
                     linewidth=0.5
                 )
+                colors_used.append(scatter.get_facecolors()[0])
+                
+            # Add background coloring if requested
+            match background:
+                case None:
+                    pass
+                case BackgroundColorsMethod.VORONOI:
+                    # Voronoi diagram approach
+                    points = projected[:, :2]
+                    vor = Voronoi(points)
+                    
+                    # Plot Voronoi regions
+                    for i, region_idx in enumerate(vor.point_region):
+                        region = vor.regions[region_idx]
+                        if not -1 in region and len(region) > 0:
+                            polygon = [vor.vertices[j] for j in region]
+                            label_idx = np.where(unique_labels == labels[i])[0][0]
+                            ax.fill(*zip(*polygon), color=colors_used[label_idx], alpha=0.2)
+                    
+                case BackgroundColorsMethod.GRID:
+                    # Grid-based interpolation approach
+                    x_min, x_max = projected[:, 0].min() - 1, projected[:, 0].max() + 1
+                    y_min, y_max = projected[:, 1].min() - 1, projected[:, 1].max() + 1
+                    
+                    # Create mesh grid
+                    h = (x_max - x_min) / 200  # resolution
+                    xx, yy = np.meshgrid(
+                        np.arange(x_min, x_max, h),
+                        np.arange(y_min, y_max, h)
+                    )
+                    
+                    # Find nearest neighbor for each grid point
+                    grid_points = np.c_[xx.ravel(), yy.ravel()]
+                    
+                    # For each grid point, find the nearest data point
+                    distances = distance.cdist(grid_points, projected[:, :2])
+                    nearest_indices = np.argmin(distances, axis=1)
+                    Z = labels[nearest_indices]
+                    Z = Z.reshape(xx.shape)
+                    
+                    # Plot decision boundary
+                    n_classes = len(unique_labels)
+                    cmap = ListedColormap(colors_used)
+                    ax.contourf(xx, yy, Z, alpha=0.2, levels=n_classes-1, cmap=cmap)
+                    
+                case _:
+                    raise NotImplementedError("background '{}' not implemented yet".format(background))
 
             ax.set_xlabel('Component 1', fontsize=12)
             ax.set_ylabel('Component 2', fontsize=12)
