@@ -18,6 +18,10 @@ from typing import Any
 import os
 import re
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# CUSTOM TQDM CLASS
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
 class TqdmMinutesAndHours(tqdm):
     """
     Custom tqdm:
@@ -57,58 +61,9 @@ class TqdmMinutesAndHours(tqdm):
         
         return d
 
-def get_model(dir:str, specific_num:int=None) -> tuple[str, int]:
-    """
-    Search for model files with numeric identifiers in a directory tree.\\
-    Recursively searches the specified directory and all subdirectories for files matching the pattern: `<prefix>_<number>.<extension>`\\
-    The function extracts the numeric identifier from each matching filename and either:
-    - Returns the file with the highest number (default behavior)
-    - Returns the file with a specific number if requested
-    
-    Args:
-        dir (str):              Root directory path to search. All subdirectories will be recursively traversed.
-        specific_num (int):     If provided, returns the first file found with this exact number instead of searching for the maximum
-    
-    Returns:
-        tuple(str, int):
-            - filename (str):   Full filepath (including directory path) of the matching model file. If no matching files exist returns an empty string
-            - epoch (int):      Number found for the full filepath
-    """
-    pattern= re.compile(r'_(\d+)\.(\D+)$')
-    
-    curr_epoch= 0
-    output_filename= ""
-    
-    for path, _, files in os.walk(dir):
-        for filename in files:
-            match = re.search(pattern, filename)
-            if match:
-                number = int(match.group(1))
-                if number > curr_epoch:
-                    curr_epoch= number
-                    output_filename= os.path.join(path, filename)
-                if (specific_num is not None) and (specific_num==number):
-                    return os.path.join(path, filename), curr_epoch
-    
-    return output_filename, curr_epoch
-
-def scaler_file_patient_ids(dictionary:dict[str,Any], separator:str="-") -> str:
-    """
-    Generate a string using the `separator` to divide the numbers of the patient ids.
-    
-    Args:
-        dictionary (dict[str,Any]): Dictionary with patient_id as key and anything as value
-        separator (str):            Separator to use to divide the patient ids
-    
-    Examples:
-        >>> scaler_file_patient_ids(dictionary, separator="_")
-        >>> '02_04_05_06_07_09_10_11_12_14_15_17_18_20_21_22_23_24'
-        >>> scaler_file_patient_ids(dictionary, separator="-")
-        >>> '02-04-05-06-07-09-10-11-12-14-15-17-18-20-21-22-23-24'
-        >>> scaler_file_patient_ids(dictionary, separator=" - ")
-        >>> '02 - 04 - 05 - 06 - 07 - 09 - 10 - 11 - 12 - 14 - 15 - 17 - 18 - 20 - 21 - 22 - 23 - 24'
-    """
-    return separator.join(sorted([key.replace("chb", "") for key in dictionary.keys()], key=lambda x : int(x)))
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# FUNCTIONS WHICH GENERATE OBJECTS
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scaler:bool, train_dict:dict[str,Any], train_set:Subset, device:str) -> Scaler|None:
     """
@@ -118,7 +73,7 @@ def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scal
         logger (Logger|None):       Logger to log some information. If it is None, it is skipped
         scaler (ScalerType|None):   Set if you want to use a scaler and which one you want to use
         single_scaler (bool):       If True, compute single scaler values across all dimensions instead of compute scaler values per feature
-        train_dict (dict[str,Any]): Dictionary with patient_id as key and anything as value
+        train_dict (dict[str,Any]): Dictionary with patient_id as key and anything as value. If not set the scaler will not be loaded and saved
         train_set (Subset):         Subset where the train set is loaded
         device (str):               Device where put the scaler on (the same as the dataset)
     
@@ -132,15 +87,21 @@ def scaler_load_and_save(logger:Logger|None, scaler:ScalerType|None, single_scal
     if (scaler is not None):
         if (logger is not None):
             logger.info(f"Loading scaler '{scaler.name}'...")
-        scaler_name= "{}{}_{}.{}".format(scaler.name, '_single' if single_scaler else "", scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
-        scaler_path= os.path.join(SCALER_SAVE_FOLDER, scaler_name)
+        if (train_dict is not None):
+            scaler_name= "{}{}_{}.{}".format(scaler.name, '_single' if single_scaler else "", scaler_file_patient_ids(train_dict, separator="-"), MODEL_EXTENTION)
+            scaler_path= os.path.join(SCALER_SAVE_FOLDER, scaler_name)
+        else:
+            scaler_path= None
         scaler:Scaler= ConcreteScaler.create_scaler(scaler, device=device)
     
-        if os.path.exists(scaler_path):
-            scaler= scaler.load(scaler_path, device=device)
+        if (scaler_path is not None):
+            if os.path.exists(scaler_path):
+                scaler= scaler.load(scaler_path, device=device)
+            else:
+                scaler.fit(train_set, single_value=single_scaler, func_operation=func_operation, use_tqdm=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
+                scaler.save(scaler_path)
         else:
             scaler.fit(train_set, single_value=single_scaler, func_operation=func_operation, use_tqdm=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
-            scaler.save(scaler_path)
     
     return scaler
 
@@ -263,47 +224,6 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
     
     return dataset
 
-def augment_dataset_train(logger:Logger|None, dataset:SeizureDatasetDetection, train_dict:dict[str, list[int]], remove:bool=False):
-    """
-    Use the augmentation in the dataset passed
-    
-    Args:
-        logger (Logger|None):               Logger to log some information. If it is None, it is skipped
-        dataset (SeizureDatasetDetection):  Only on this dataset is possible to apply the augmentation. If the dataset is of a different class the operation is ignored
-        train_dict (dict[str,list[int]]):   Dictionary with patient_id as key and list of labels of integers as value
-        remove (bool):                      If set remove the augmentation instead of apply it
-    
-    Returns:
-        train_dict (dict[str,list[int]]):   The train dictionary after the augmentation.\\
-                                            If the dataset if of a different class the function return whatever is passed in the `train_dict` parameter
-    """
-    if not(isinstance(dataset, SeizureDatasetDetection)):
-        return train_dict
-    
-    pos_samples_before , neg_samples_before = pos_neg_samples(train_dict)
-    
-    _ = dataset.remove_augmentation() if (remove) else dataset.apply_augmentations(AUGMENTATIONS, train_dict.keys())
-    _, train_dict = split_patient_data_specific(dataset.targets_dict(), train_dict.keys())
-    
-    pos_samples_after , neg_samples_after = pos_neg_samples(train_dict)
-    
-    if (pos_samples_before != pos_samples_after) and (logger is not None):
-        logger.info("Positive train samples are {} from {:,} to {:,} [{:+.2f}%]".format(
-            "removed" if (remove) else "augmented",
-            pos_samples_before,
-            pos_samples_after,
-            100*(pos_samples_after - pos_samples_before) / pos_samples_before
-        ))
-    if (neg_samples_before != neg_samples_after) and (logger is not None):
-        logger.info("Negative train samples are {} from {:,} to {:,} [{:+.2f}%]".format(
-            "removed" if (remove) else "augmented",
-            neg_samples_before,
-            neg_samples_after,
-            100*(neg_samples_after - neg_samples_before) / neg_samples_before
-    ))
-    
-    return train_dict
-
 def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:bool, loss_type:Loss, device:str) -> tuple[Loss, int, int]:
     """
     Generate a loss and compute the number of seizure and not seizure data (if the model is set to detection)
@@ -357,6 +277,104 @@ def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:
             logger.info("Using loss type '{}'{}".format(loss_type.name, '' if loss_params_str=="" else f' with parameters :\n{loss_params_str}'))
     
     return loss, NUM_SEIZURE_DATA, NUM_NOT_SEIZURE_DATA
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# UTILITY FUNCTIONS
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def augment_dataset_train(logger:Logger|None, dataset:SeizureDatasetDetection, train_dict:dict[str, list[int]], remove:bool=False):
+    """
+    Use the augmentation in the dataset passed
+    
+    Args:
+        logger (Logger|None):               Logger to log some information. If it is None, it is skipped
+        dataset (SeizureDatasetDetection):  Only on this dataset is possible to apply the augmentation. If the dataset is of a different class the operation is ignored
+        train_dict (dict[str,list[int]]):   Dictionary with patient_id as key and list of labels of integers as value
+        remove (bool):                      If set remove the augmentation instead of apply it
+    
+    Returns:
+        train_dict (dict[str,list[int]]):   The train dictionary after the augmentation.\\
+                                            If the dataset if of a different class the function return whatever is passed in the `train_dict` parameter
+    """
+    if not(isinstance(dataset, SeizureDatasetDetection)):
+        return train_dict
+    
+    pos_samples_before , neg_samples_before = pos_neg_samples(train_dict)
+    
+    _ = dataset.remove_augmentation() if (remove) else dataset.apply_augmentations(AUGMENTATIONS, train_dict.keys())
+    _, train_dict = split_patient_data_specific(dataset.targets_dict(), train_dict.keys())
+    
+    pos_samples_after , neg_samples_after = pos_neg_samples(train_dict)
+    
+    if (pos_samples_before != pos_samples_after) and (logger is not None):
+        logger.info("Positive train samples are {} from {:,} to {:,} [{:+.2f}%]".format(
+            "removed" if (remove) else "augmented",
+            pos_samples_before,
+            pos_samples_after,
+            100*(pos_samples_after - pos_samples_before) / pos_samples_before
+        ))
+    if (neg_samples_before != neg_samples_after) and (logger is not None):
+        logger.info("Negative train samples are {} from {:,} to {:,} [{:+.2f}%]".format(
+            "removed" if (remove) else "augmented",
+            neg_samples_before,
+            neg_samples_after,
+            100*(neg_samples_after - neg_samples_before) / neg_samples_before
+    ))
+    
+    return train_dict
+
+def get_model(dir:str, specific_num:int=None) -> tuple[str, int]:
+    """
+    Search for model files with numeric identifiers in a directory tree.\\
+    Recursively searches the specified directory and all subdirectories for files matching the pattern: `<prefix>_<number>.<extension>`\\
+    The function extracts the numeric identifier from each matching filename and either:
+    - Returns the file with the highest number (default behavior)
+    - Returns the file with a specific number if requested
+    
+    Args:
+        dir (str):              Root directory path to search. All subdirectories will be recursively traversed.
+        specific_num (int):     If provided, returns the first file found with this exact number instead of searching for the maximum
+    
+    Returns:
+        tuple(str, int):
+            - filename (str):   Full filepath (including directory path) of the matching model file. If no matching files exist returns an empty string
+            - epoch (int):      Number found for the full filepath
+    """
+    pattern= re.compile(r'_(\d+)\.(\D+)$')
+    
+    curr_epoch= 0
+    output_filename= ""
+    
+    for path, _, files in os.walk(dir):
+        for filename in files:
+            match = re.search(pattern, filename)
+            if match:
+                number = int(match.group(1))
+                if number > curr_epoch:
+                    curr_epoch= number
+                    output_filename= os.path.join(path, filename)
+                if (specific_num is not None) and (specific_num==number):
+                    return os.path.join(path, filename), curr_epoch
+    
+    return output_filename, curr_epoch
+
+def scaler_file_patient_ids(dictionary:dict[str,Any], separator:str="-") -> str:
+    """
+    Generate a string using the `separator` to divide the numbers of the patient ids.
+    
+    Args:
+        dictionary (dict[str,Any]): Dictionary with patient_id as key and anything as value
+        separator (str):            Separator to use to divide the patient ids
+    
+    Examples:
+        >>> scaler_file_patient_ids(dictionary, separator="_")
+        >>> '02_04_05_06_07_09_10_11_12_14_15_17_18_20_21_22_23_24'
+        >>> scaler_file_patient_ids(dictionary, separator="-")
+        >>> '02-04-05-06-07-09-10-11-12-14-15-17-18-20-21-22-23-24'
+        >>> scaler_file_patient_ids(dictionary, separator=" - ")
+        >>> '02 - 04 - 05 - 06 - 07 - 09 - 10 - 11 - 12 - 14 - 15 - 17 - 18 - 20 - 21 - 22 - 23 - 24'
+    """
+    return separator.join(sorted([key.replace("chb", "") for key in dictionary.keys()], key=lambda x : int(x)))
 
 def pos_neg_samples(dictionary:dict[str, list[int]]):
     """
