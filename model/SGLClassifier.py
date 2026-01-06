@@ -275,7 +275,7 @@ class SGLC_Classifier(nn.Module):
         
         return result
     
-    def forward(self, input_seq:Tensor, supports:Tensor) -> Tensor|tuple[Tensor, Tensor, Tensor]:
+    def forward(self, input_seq:Tensor, supports:Tensor) -> tuple[Tensor,Tensor]|tuple[Tensor, Tensor, Tensor]:
         """
         Use the SGLCEncoder to calculate the new representations of the feature/node matrix and the adjacency matrix using a hidden state initialize at all zeros
         
@@ -283,21 +283,22 @@ class SGLC_Classifier(nn.Module):
             input_seq (Tensor):     Input features matrix with size (batch_size, sequential_length, num_nodes, input_dim)
             supports (Tensor):      Adjacency matrix with size (batch_size, num_nodes, num_nodes)
             
-        :returns out (Tensor | tuple[Tensor, Tensor, Tensor]):
-        - Tensor: if `pretrain_with_decoder` is True
-            - input_seq: Updated Tensor after encoder-decoder structure with shape (batch_size, seq_length, num_nodes, input_dim)
+        :returns out (tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor]):
+        - tuple[Tensor, Tensor]: if `pretrain_with_decoder` is True
+            - encoder_input_seq:    Updated Tensor after the encoder model with shape (batch_size, seq_length, num_nodes, input_dim)
+            - input_seq:            Updated Tensor after encoder-decoder structure with shape (batch_size, seq_length, num_nodes, input_dim)
         - tuple[Tensor, Tensor, Tensor]: if `pretrain_with_decoder` is False
             - result:    Class probability distribution with shape (batch_size, num_classes)
             - input_seq: Encoded feature sequence with shape (batch_size, seq_length, num_nodes, input_dim)
             - supports:  Learned adjacency matrix with shape (batch_size, num_nodes, num_nodes)
-            
         """
         input_seq, supports, hidden = self._forward_encoder(input_seq, supports)
         
         # case pretraining
         if self.pretrain_with_decoder:
+            encoder_input_seq = input_seq.clone()
             input_seq, _, _ = self._forward_decoder(input_seq, supports, hidden)
-            return input_seq
+            return encoder_input_seq, input_seq
         
         # case fine-tuning
         else:
