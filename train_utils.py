@@ -139,12 +139,14 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
         num_GL_heads            = NUM_GL_HEADS,
         dropout_GL              = GL_DROPOUT,
         epsilon                 = EPSILON,
+        v2_GGNN                 = USE_GGNN_GATv2,
+        num_GGNN_heads          = NUM_GGNN_HEADS,
         
         hidden_dim_GGNN         = HIDDEN_DIM_GGNN,
+        type_GGNN               = GGNN_TYPE,
         num_steps               = NUM_STEPS,
         num_GGNN_layers         = NUM_GGNN_LAYERS,
         act_GGNN                = ACT_GGNN,
-        use_GRU_in_GGNN         = USE_GRU_IN_GGNN,
         
         transformer_type        = TRANSFORMER_TYPE,
         num_transf_heads        = TRANSFORMER_NUM_HEADS,
@@ -159,7 +161,7 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
         
         use_sigmoid             = USE_SIGMOID,
         act                     = GL_ACT,
-        v2                      = USE_GATv2,
+        v2                      = USE_GL_GATv2,
         concat                  = CONCAT,
         beta                    = BETA,
         
@@ -453,7 +455,7 @@ def additional_info(preprocessed_data:bool, dataset_data:list[tuple[str,Any]]) -
         ("GL_DROPOUT", GL_DROPOUT),
         ("EPSILON", EPSILON),
         ("USE_SIGMOID", USE_SIGMOID),
-        ("USE_GATv2", USE_GATv2),
+        ("USE_GL_GATv2", USE_GL_GATv2),
         ("CONCAT", CONCAT),
         ("BETA", BETA)
     ]
@@ -462,10 +464,12 @@ def additional_info(preprocessed_data:bool, dataset_data:list[tuple[str,Any]]) -
     # GATED GRAPH NEURAL NETWORK
     GGNN_tuple = [("HIDDEN_DIM_GGNN", HIDDEN_DIM_GGNN)] if USE_GRU else []
     GGNN_tuple.extend([
+        ("GGNN_TYPE", GGNN_TYPE),
         ("NUM_STEPS", NUM_STEPS),
         ("NUM_GGNN_LAYERS", NUM_GGNN_LAYERS),
         ("ACT_GGNN", ACT_GGNN),
-        ("USE_GRU_IN_GGNN", USE_GRU_IN_GGNN)
+        ("NUM_GGNN_HEADS", NUM_GGNN_HEADS),
+        ("USE_GGNN_GATv2", USE_GGNN_GATv2)
     ])
     GGNN_str = "GGNN info:\n{}".format(dict_to_str(GGNN_tuple))
     

@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from model.SGLCell import SGLC_Cell
+from model.GatedGraphNeuralNetworks import GGNNType
 from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 
 import warnings
@@ -30,10 +31,12 @@ class SGLC_Encoder(nn.Module):
             epsilon:float=None,
             
             hidden_dim_GGNN:int=None,
+            type_GGNN:GGNNType=GGNNType.PROPAGATOR,
             num_steps:int=5,
             num_GGNN_layers:int=1,
             act_GGNN:str|Callable=None,
-            use_GRU_in_GGNN:bool=True,
+            v2_GGNN:bool=False,
+            num_GGNN_heads:int=0,
             
             seed:int=None,
             device:str=None,
@@ -59,10 +62,12 @@ class SGLC_Encoder(nn.Module):
             epsilon (float):                        Threshold for deleting weak connections in the learned graph in the Graph Learner module. If None, no deleting is applied
             
             hidden_dim_GGNN (int):                  Hidden dimension of the hidden state for Gated Graph Neural Networks module (only if `use_GRU` is True)
+            type_GGNN (GGNNType):                   Type of module to use in the Gated Graph Neural Networks module
             num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
             num_GGNN_layers (int):                  Number of Propagation modules in the Gated Graph Neural Networks module
             act_GGNN (str|Callable):                The non-linear activation function to use inside the linear activation function in the Gated Graph Neural Networks module. If None use the default class value
-            use_GRU_in_GGNN (bool):                 Use the GRU module instead of the standard propagator in the Gated Graph Neural Networks module
+            v2_GGNN (bool):                         Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
+            num_GGNN_heads (int):                   Number of heads for multi-head attention in the Gated Graph Neural Networks module
             
             seed (int):                             Sets the seed for the weights initializations. If None, don't use any seed
             device (str):                           Device to place the model on
@@ -101,10 +106,12 @@ class SGLC_Encoder(nn.Module):
                     epsilon         = epsilon,
                     
                     hidden_dim_GGNN = hidden_dim_GGNN,
+                    type_GGNN       = type_GGNN,
                     num_steps       = num_steps,
                     num_GGNN_layers = num_GGNN_layers,
                     act_GGNN        = act_GGNN,
-                    use_GRU_in_GGNN = use_GRU_in_GGNN,
+                    v2_GGNN         = v2_GGNN,
+                    num_GGNN_heads  = num_GGNN_heads,
                     
                     seed            = seed,
                     device          = device,

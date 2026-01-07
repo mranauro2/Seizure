@@ -2,6 +2,7 @@
 from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 from model.Transformer.PositionalEncoding import PositionalEncodingType
 from model.Transformer.TransformerType import TransformerType
+from model.GatedGraphNeuralNetworks import GGNNType
 from data.dataloader.SeizureAugmentation import *
 import numpy as np
 
@@ -141,7 +142,7 @@ USE_SIGMOID= True
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Use the sigmoid as activation function after the computation of the attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
-USE_GATv2= True
+USE_GL_GATv2= True
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
@@ -199,6 +200,10 @@ HIDDEN_DIM_GGNN= 0
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Hidden dimension in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module. Only if `USE_GRU` is True"""
 
+GGNN_TYPE= GGNNType.PROPAGATOR
+"""Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
+Choose which module use in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
 NUM_STEPS= 5
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Number of propagation steps in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
@@ -211,6 +216,10 @@ ACT_GGNN= None
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Non-linear activation function to use inside the linear activation in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module. If None use the default class value"""
 
-USE_GRU_IN_GGNN= False
+NUM_GGNN_HEADS= 0
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
-Use the GRU module instead of the standard propagator in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+Number of heads for multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
+USE_GGNN_GATv2= False
+"""Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
+Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
