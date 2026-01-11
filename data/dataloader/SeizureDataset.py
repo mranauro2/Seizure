@@ -1,13 +1,13 @@
 from torch.utils.data import Dataset
-from torch import Tensor, FloatTensor
+from torch import Tensor
 import torch
 
 from typing_extensions import override
 from collections import defaultdict
 from abc import ABC, abstractmethod
-from typing import Any
 from enum import Enum, auto
 from copy import deepcopy
+from typing import Any
 
 from data.dataloader.SeizureUtilityType import SampleSeizureData, NextTimeData, NO_AUGMENTATION
 from data.dataloader.SeizureAugmentation import Augmentation
@@ -42,6 +42,7 @@ class BaseSeizureDataset(Dataset, ABC):
         time_step_size:int=1,
         max_seq_len:int=12,
         use_fft:bool=True,
+        use_fft_adj:bool=True,
         
         preprocess_data:str=None,
         
@@ -59,8 +60,9 @@ class BaseSeizureDataset(Dataset, ABC):
             time_step_size (int):               Duration of each time step in seconds for FFT analysis. Used only if `use_fft` is True
             max_seq_len (int):                  Total duration of the output EEG clip in seconds
             use_fft (bool):                     Use the Fast Fourier Transform when obtain the slice from the file
+            use_fft_adj (bool):                 Calculate the adjacency matrix using the matrix after the FFT
             
-            preprocess_data (str):              Directory to the preprocess data. If it is not None `input_dir`, `time_step_size`, `max_seq_len`, `use_fft` will not be considered
+            preprocess_data (str):              Directory to the preprocess data. If it is not None `input_dir`, `time_step_size`, `max_seq_len`, `use_fft`, `use_fft_adj` will not be considered
             
             scaler (Scaler):                    Scaler to normalize the data. It will be applied after the Fast Fourier Transform (if present) and before the computation of the adjacency matrix
             method (str):                       How to compute the adjacency matrix
@@ -82,6 +84,9 @@ class BaseSeizureDataset(Dataset, ABC):
                 ignored_parameters.append('max_seq_len')
             if (use_fft is not None):
                 ignored_parameters.append('use_fft')
+            if (use_fft_adj is not None):
+                ignored_parameters.append('use_fft_adj')
+                use_fft_adj = use_fft
             if len(ignored_parameters)>0:
                 msg = "'preprocess_data' is not None. The passed following parameters are passed but ignored: '{}'".format("', '".join(ignored_parameters))
                 warnings.warn(msg)
@@ -92,6 +97,7 @@ class BaseSeizureDataset(Dataset, ABC):
 
         self.time_step_size = time_step_size
         self.max_seq_len = max_seq_len
+        self.use_fft_adj = use_fft_adj
         self.use_fft = use_fft
 
         self._scaler = scaler
@@ -167,7 +173,7 @@ class BaseSeizureDataset(Dataset, ABC):
         """Returns target labels organized by patient where the key is the patient ID and the value is a list of object according to the concrete class"""
         return self._targets
 
-    def _load_clip(self, file_name:str, index:int) -> np.ndarray:
+    def _load_clip(self, file_name:str, index:int, use_fft:bool=None) -> np.ndarray:
         """Load a clip given its file_name and its index (can be not present)"""
         if self.preprocess_data is not None:
             eeg_clip = np.load(file_name)
@@ -177,7 +183,7 @@ class BaseSeizureDataset(Dataset, ABC):
                 clip_idx        = index,
                 time_step_size  = self.time_step_size,
                 clip_len        = self.max_seq_len,
-                use_fft         = self.use_fft,
+                use_fft         = use_fft,
         )
         
         return eeg_clip
@@ -335,19 +341,23 @@ class SeizureDatasetDetection(BaseSeizureDataset):
         """
         # load or create the eeg_clip
         sample = self.file_info[index]
-        eeg_clip = self._load_clip(sample.file_name, sample.clip_index)
-                    
+        eeg_clip = self._load_clip(sample.file_name, sample.clip_index, self.use_fft)
+        
+        # Load clip for adjacency computation if different from feature clip
+        eeg_clip_for_adj = eeg_clip if (self.use_fft_adj == self.use_fft) else self._load_clip(sample.file_name, sample.clip_index, self.use_fft_adj)
+        
         # apply augmentation if present
         if (self.augmentations is not None):
             for augmentation in self.augmentations:
                 if (sample.augmentation == augmentation.index):
-                    eeg_clip = augmentation.transform(eeg_clip)
+                    eeg_clip, eeg_clip_for_adj = augmentation.transform([eeg_clip, eeg_clip_for_adj])
 
         # apply scaler if present
         eeg_clip = self._apply_scaler(eeg_clip)
+        eeg_clip_for_adj = self._apply_scaler(eeg_clip_for_adj)
 
         # construct adjacency matrix
-        adj = self._compute_adj(eeg_clip)
+        adj = self._compute_adj(eeg_clip_for_adj)
         
         # retured values
         x = torch.FloatTensor(eeg_clip)
@@ -455,12 +465,16 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
         # load or create the eeg_clip
         sample:NextTimeData = self.file_info[index]
         eeg_clip = self._load_clip(sample.file_name, sample.clip_index)
-    
+
+        # Load clip for adjacency computation if different from feature clip
+        eeg_clip_for_adj = eeg_clip if (self.use_fft_adj == self.use_fft) else self._load_clip(sample.file_name, sample.clip_index, self.use_fft_adj)
+        
         # apply scaler if present
         eeg_clip = self._apply_scaler(eeg_clip)
-        
+        eeg_clip_for_adj = self._apply_scaler(eeg_clip_for_adj)
+
         # construct adjacency matrix
-        adj = self._compute_adj(eeg_clip)
+        adj = self._compute_adj(eeg_clip_for_adj)
         
         # retured values
         x = torch.FloatTensor(eeg_clip)

@@ -56,11 +56,11 @@ class Augmentation(ABC):
         return (self.p >= 1)
     
     @abstractmethod
-    def transform(self, eeg_clip:np.ndarray) -> np.ndarray:
+    def transform(self, eeg_clips:list[np.ndarray]) -> list[np.ndarray]:
         """
         Transform the input according to the class description. If the probability is 0 no transformation is applied
-            :param eeg_clip (np.ndarray):               EEG clip with shape (clip_len, num_channels, frequency)
-            :returns eeg_clip_transform (np.ndarray):   EEG clip transformed
+            :param eeg_clips (list[np.ndarray]):               EEG clip list where each item has shape (clip_len, num_channels, frequency)
+            :returns eeg_clips_transform (list[np.ndarray]):   EEG clip list transformed
         """
         raise NotImplementedError("Function in abstract class not implemented")
 
@@ -96,16 +96,16 @@ class SwapFixedChannels(Augmentation):
             self.channels.append(channel)
             
     @override
-    def transform(self, eeg_clip:np.ndarray):
+    def transform(self, eeg_clips:list[np.ndarray]):
         # if the probability is null do nothing
         if self.is_probability_zero():
-            return eeg_clip
+            return eeg_clips
         
-        eeg_clip = eeg_clip.copy()
         for channel in self.channels:
-            eeg_clip[:, [channel.index_0, channel.index_1], :] = eeg_clip[:, [channel.index_1, channel.index_0], :]
+            for eeg_clip in eeg_clips:
+                eeg_clip[:, [channel.index_0, channel.index_1], :] = eeg_clip[:, [channel.index_1, channel.index_0], :]
         
-        return eeg_clip
+        return eeg_clips
 
 class SwapRandomChannels(Augmentation):
     """Swap the channels of the data"""    
@@ -126,19 +126,19 @@ class SwapRandomChannels(Augmentation):
         self.num_channels_to_swap = num_channels
             
     @override
-    def transform(self, eeg_clip:np.ndarray):
+    def transform(self, eeg_clips:list[np.ndarray]):
         # if the probability is null do nothing
         if self.is_probability_zero():
-            return eeg_clip
+            return eeg_clips
         
-        num_channels = eeg_clip.shape[1]
+        num_channels = eeg_clips[0].shape[1]
         channels_to_swap = self.random_generator.choice(num_channels, self.num_channels_to_swap, replace=False)
         
-        eeg_clip = eeg_clip.copy()
         for index in range(len(channels_to_swap)-1):
-            eeg_clip[:, [index, index+1], :] = eeg_clip[:, [index+1, index], :]
+            for eeg_clip in eeg_clips:
+                eeg_clip[:, [index, index+1], :] = eeg_clip[:, [index+1, index], :]
         
-        return eeg_clip
+        return eeg_clips
 
 class Scale(Augmentation):
     """Scale the input"""
@@ -174,15 +174,14 @@ class Scale(Augmentation):
         self.operation = Scale.OPERATIONS[operation]
     
     @override
-    def transform(self, eeg_clip:np.ndarray):
+    def transform(self, eeg_clips:list[np.ndarray]):
         # if the probability is null do nothing
         if self.is_probability_zero():
-            return eeg_clip
+            return eeg_clips
         
         scale = self.random_generator.uniform(self.min, self.max)
         
-        eeg_clip = eeg_clip.copy()
-        eeg_clip = self.operation(eeg_clip, scale)
+        eeg_clips = [self.operation(eeg_clip, scale) for eeg_clip in eeg_clips]
         
-        return eeg_clip
+        return eeg_clips
     
