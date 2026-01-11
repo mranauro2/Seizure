@@ -206,6 +206,7 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
             time_step_size  = TIME_STEP_SIZE if (preprocess_dir is None) else None,
             max_seq_len     = MAX_SEQ_LEN    if (preprocess_dir is None) else None,
             use_fft         = USE_FFT        if (preprocess_dir is None) else None,
+            use_fft_adj     = USE_FFT_ADJ,
             preprocess_data = preprocess_dir,
             method          = method,
             top_k           = TOP_K,
@@ -218,6 +219,7 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
             time_step_size  = TIME_STEP_SIZE if (preprocess_dir is None) else None,
             max_seq_len     = MAX_SEQ_LEN    if (preprocess_dir is None) else None,
             use_fft         = USE_FFT        if (preprocess_dir is None) else None,
+            use_fft_adj     = USE_FFT_ADJ,
             preprocess_data = preprocess_dir,
             method          = method,
             top_k           = TOP_K,
@@ -426,7 +428,8 @@ def additional_info(preprocessed_data:bool, dataset_data:list[tuple[str,Any]]) -
     dataset_tuple_no_preprocess = [
         ("MAX_SEQ_LEN", MAX_SEQ_LEN),
         ("TIME_STEP_SIZE", TIME_STEP_SIZE),
-        ("USE_FFT", USE_FFT)
+        ("USE_FFT", USE_FFT),
+        ("USE_FFT_ADJ", USE_FFT_ADJ)
     ]
     dataset_tuple = [
         ("TOP_K", TOP_K),

@@ -38,6 +38,10 @@ USE_FFT= True
 """Used in :data:`data.dataloader.SeizureDataset` \\
 Use the Fast Fourier Transform when obtain the slice from the file"""
 
+USE_FFT_ADJ= True
+"""Used in :data:`data.dataloader.SeizureDataset` \\
+Compute the adjacency matrix after the Fast Fourier Transform on the slice from the file"""
+
 TOP_K= None
 """Used in :data:`data.dataloader.SeizureDataset` \\
 Maintain only the `top_k` higher value when compute the adjacency matrix"""
