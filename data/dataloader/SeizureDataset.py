@@ -109,7 +109,7 @@ class BaseSeizureDataset(Dataset, ABC):
         # parse metadata
         self.file_info = []
         for file in files_record or []:
-            self.file_info.extend(self._parse_record_file(file))
+            self.file_info.extend([item for item in self._parse_record_file(file) if item not in self.file_info])
 
         self._targets = self._generate_targets_dict(self.file_info)
 
@@ -272,16 +272,17 @@ class SeizureDatasetDetection(BaseSeizureDataset):
             with open(file, "r") as f:
                 try:
                     for line in f.readlines():
-                        patient_id, file_name, index, has_seizure = line.split(",")
+                        patient_id, file_name, index, has_seizure, distance_seizure = line.split(",")
                         data.append(SampleSeizureData(
-                            patient_id  = patient_id.strip(),
-                            file_name   = file_name.strip(),
-                            clip_index  = int(index.strip()),
-                            has_seizure = bool(int(has_seizure.strip()))
+                            patient_id       = patient_id.strip(),
+                            file_name        = file_name.strip(),
+                            clip_index       = int(index.strip()),
+                            distance_seizure = float(distance_seizure.strip()),
+                            has_seizure      = bool(int(has_seizure.strip()))
                         ))
                 except ValueError as e:
-                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack"):
-                        e = ValueError("Expected format 'str, str, int, bool' for each line of file {}".format(file))
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack") or str(e).startswith("could not convert string to float"):
+                        e = ValueError("Expected format 'str, str, int, bool, float' for each line of file {}".format(file))
                     raise e
                 
         # case preprocess_data not None
@@ -289,16 +290,17 @@ class SeizureDatasetDetection(BaseSeizureDataset):
             with open(file, "r") as f:
                 try:
                     for line in f.readlines():
-                        patient_id, file_name, has_seizure = line.split(",")
+                        patient_id, file_name, has_seizure, distance_seizure = line.split(",")
                         data.append(SampleSeizureData(
-                            patient_id  = patient_id.strip(),
-                            file_name   = file_name.strip(),
-                            clip_index  = None,
-                            has_seizure = bool(int(has_seizure.strip()))
+                            patient_id       = patient_id.strip(),
+                            file_name        = file_name.strip(),
+                            clip_index       = None,
+                            distance_seizure = float(distance_seizure.strip()),
+                            has_seizure      = bool(int(has_seizure.strip()))
                         ))
                 except ValueError as e:
-                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack"):
-                        e = ValueError("Expected format 'str, str, bool' for each line of file {}".format(file))
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack") or str(e).startswith("could not convert string to float"):
+                        e = ValueError("Expected format 'str, str, bool, float' for each line of file {}".format(file))
                     raise e
         
         return data
@@ -321,7 +323,7 @@ class SeizureDatasetDetection(BaseSeizureDataset):
 
     @override
     def _build_target(self, sample:SampleSeizureData):
-        return torch.FloatTensor([sample.has_seizure])
+        return (torch.FloatTensor([sample.has_seizure]), sample.patient_id, sample.distance_seizure)
     
     @override
     def __getitem__(self, index:int):
@@ -330,9 +332,9 @@ class SeizureDatasetDetection(BaseSeizureDataset):
             index (int):    Index in [0, 1, ..., size_of_dataset-1]
             
         Returns:
-            tuple (Tensor, Tensor, Tensor):     The triplets is:
+            tuple (Tensor, tuple[Tensor, Tensor], Tensor):     The triplets is:
                 - Feature/node matrix with shape (max_seq_len, num_channels, feature_dim)
-                - Target of the current graph
+                - Target of the current graph and distance from the nearest seizure event
                 - Adjacency matrix with shape (num_channels, num_channels)
         
         Notes:
@@ -393,18 +395,19 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
             with open(file, "r") as f:
                 try:
                     for line in f.readlines():
-                        patient_id, file_name, index, file_name_next, index_next, has_seizure = line.split(",")
+                        patient_id, file_name, index, file_name_next, index_next, has_seizure, distance_seizure = line.split(",")
                         data.append(NextTimeData(
-                            patient_id      = patient_id.strip(),
-                            file_name       = file_name.strip(),
-                            clip_index      = int(index.strip()),
-                            file_name_next  = file_name_next.strip(),
-                            clip_index_next = int(index_next.strip()),
-                            has_seizure     = int(has_seizure.strip())
+                            patient_id       = patient_id.strip(),
+                            file_name        = file_name.strip(),
+                            clip_index       = int(index.strip()),
+                            file_name_next   = file_name_next.strip(),
+                            clip_index_next  = int(index_next.strip()),
+                            distance_seizure = float(distance_seizure.strip()),
+                            has_seizure      = int(has_seizure.strip())
                         ))
                 except ValueError as e:
-                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack"):
-                        e = ValueError("Expected format 'str, str, int, str, int, int' for each line of file {}".format(file))
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack") or str(e).startswith("could not convert string to float"):
+                        e = ValueError("Expected format 'str, str, int, str, int, int, float' for each line of file {}".format(file))
                     raise e
                 
         # case preprocess_data not None
@@ -412,18 +415,19 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
             with open(file, "r") as f:
                 try:
                     for line in f.readlines():
-                        patient_id, file_name, file_name_next, has_seizure = line.split(",")
+                        patient_id, file_name, file_name_next, has_seizure, distance_seizure = line.split(",")
                         data.append(NextTimeData(
-                            patient_id      = patient_id.strip(),
-                            file_name       = file_name.strip(),
-                            clip_index      = None,
-                            file_name_next  = file_name_next.strip(),
-                            clip_index_next = None,
-                            has_seizure     = int(has_seizure.strip())
+                            patient_id       = patient_id.strip(),
+                            file_name        = file_name.strip(),
+                            clip_index       = None,
+                            file_name_next   = file_name_next.strip(),
+                            clip_index_next  = None,
+                            distance_seizure = float(distance_seizure.strip()),
+                            has_seizure      = int(has_seizure.strip())
                         ))
                 except ValueError as e:
-                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack"):
-                        e = ValueError("Expected format 'str, str, str, int' for each line of file {}".format(file))
+                    if str(e).startswith("invalid literal for int() with base 10") or str(e).startswith("not enough values to unpack") or str(e).startswith("too many values to unpack") or str(e).startswith("could not convert string to float"):
+                        e = ValueError("Expected format 'str, str, str, int, float' for each line of file {}".format(file))
                     raise e
         
         return data

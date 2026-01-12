@@ -8,6 +8,7 @@ class SampleSeizureData(NamedTuple):
     file_name:str
     clip_index:int
     has_seizure:bool
+    distance_seizure:float
     augmentation:int=NO_AUGMENTATION
 
 class NextTimeData(NamedTuple):
@@ -17,4 +18,5 @@ class NextTimeData(NamedTuple):
     file_name_next:str
     clip_index_next:int
     has_seizure:int
+    distance_seizure:float
     augmentation:int=NO_AUGMENTATION

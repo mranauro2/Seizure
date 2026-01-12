@@ -160,6 +160,18 @@ def process_segment(args):
     for start, stop in zip(info_dict["start_seizure"], info_dict["finish_seizure"]):
         overlap = overlap or is_overlap([curr_start, curr_stop], [start, stop], full_overlap=full_overlap)
     
+    # Set nearest distance from start or end of a seizure event
+    nearest_start_dist = float('Inf')
+    nearest_end_dist = float('Inf')
+    for start, stop in zip(info_dict["start_seizure"], info_dict["finish_seizure"]):
+        start_dist = start - curr_start
+        nearest_start_dist = start_dist if (abs(start_dist) < abs(nearest_start_dist)) else nearest_start_dist
+        
+        end_dist = stop - curr_stop
+        nearest_end_dist = end_dist if (abs(end_dist) < abs(nearest_end_dist)) else nearest_end_dist
+    
+    distance = nearest_end_dist if (abs(nearest_end_dist) < abs(nearest_start_dist)) else nearest_start_dist
+    
     skipped = False
     
     # Save segment if save_dir is specified
@@ -181,16 +193,16 @@ def process_segment(args):
         if use_previous_segment:
             prev_indexed_filename = f"{name_without_ext}_{str(index-1).zfill(z_fill)}{extention}"
             prev_path = os.path.abspath(os.path.join(output_dir, prev_indexed_filename))
-            output_string = f"{patient_id}, {prev_path}, {new_path}, {int(overlap)}\n"
+            output_string = f"{patient_id}, {prev_path}, {new_path}, {int(overlap)}, {distance}\n"
         else:
-            output_string = f"{patient_id}, {new_path}, {int(overlap)}\n"
+            output_string = f"{patient_id}, {new_path}, {int(overlap)}, {distance}\n"
     
     # Do not save segment
     else:
         if use_previous_segment:
-            output_string = f"{patient_id}, {name}, {str(index-1).zfill(z_fill)}, {name}, {str(index).zfill(z_fill)}, {int(overlap)}\n"
+            output_string = f"{patient_id}, {name}, {str(index-1).zfill(z_fill)}, {name}, {str(index).zfill(z_fill)}, {int(overlap)}, {distance}\n"
         else:
-            output_string = f"{patient_id}, {name}, {str(index).zfill(z_fill)}, {int(overlap)}\n"
+            output_string = f"{patient_id}, {name}, {str(index).zfill(z_fill)}, {int(overlap)}, {distance}\n"
     
     return output_string, overlap, skipped
 
@@ -228,12 +240,12 @@ def process_batch_with_file(batch_tasks:list, temp_file_path:str, progress_callb
 # MAIN PROCESSING FUNCTION
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-def main(summary_dir:str, data_dir:str, file_name:str, save_dir:str, seq_len:int, z_fill:int, check_file:bool=True, use_fft:bool=True, overwrite_segments:bool=False, full_overlap:bool=False, max_workers:int=4, use_previous_segment:bool=False, verbose:bool=True) -> None:
+def main(summary_dirs:list[str], data_dir:str, file_name:str, save_dir:str, seq_len:int, z_fill:int, check_file:bool=True, use_fft:bool=True, overwrite_segments:bool=False, full_overlap:bool=False, max_workers:int=4, use_previous_segment:bool=False, verbose:bool=True) -> None:
     """
     Process CHB-MIT dataset and generate segmented window labels using parallel processing.
     
     Args:
-        summary_dir (str):              Root directory containing CHB-MIT csv summary files
+        summary_dir (str):              List of directories containing CHB-MIT csv summary files or list or CSV files
         data_dir (str):                 Root directory containing all CHB-MIT available file
         save_dir (str):                 Root directory where save the preprocessed data
         file_name (str):                Output file path where segmentation results will be saved
@@ -259,12 +271,19 @@ def main(summary_dir:str, data_dir:str, file_name:str, save_dir:str, seq_len:int
     os.makedirs(save_dir, exist_ok=True) if (save_dir is not None) else None
             
     # find all summary files
-    summary_dir = os.path.abspath(summary_dir)
     summary_files = []
-    for path, _, files in os.walk(summary_dir):
-        for name in files:
-            if name.endswith(".csv"):
-                summary_files.append(os.path.join(path, name))
+    summary_dirs = [os.path.abspath(summary_dir) for summary_dir in summary_dirs]
+    if os.path.isdir(summary_dirs[0]):
+        for summary_dir in summary_dirs:
+            for path, _, files in os.walk(summary_dir):
+                for name in files:
+                    if name.endswith(".csv"):
+                        summary_files.append(os.path.join(path, name))
+    elif summary_dirs[0].endswith(".csv"):
+        for summary_dir in summary_dirs:
+            summary_files.append(summary_dir)
+    else:
+        raise ValueError("The 'summary_dir' is either a directory or a '*.csv' file")
     
     # find all data files
     data_files = []
@@ -353,7 +372,7 @@ def main(summary_dir:str, data_dir:str, file_name:str, save_dir:str, seq_len:int
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Segment CHB-MIT dataset into fixed-length windows and label seizure activity", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     
-    parser.add_argument("summary_dir",           type=str,                                 help="Root directory containing CHB-MIT csv summary files")
+    parser.add_argument("summary_dirs",          type=str, nargs='+',                      help="Root directories containing CHB-MIT csv summary files or csv files")
     parser.add_argument("data_dir",              type=str,                                 help="Root directory containing all CHB-MIT available file")
     parser.add_argument("file_name",             type=str,                                 help="Output file path for segmentation results")
     
@@ -371,14 +390,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # Validate directories exist
-    if not os.path.exists(args.summary_dir):
-        raise ValueError(f"Root directory does not exist: {args.summary_dir}")
+    for dir in args.summary_dirs:
+        if not os.path.exists(dir):
+            raise ValueError(f"{'Directory' if os.path.isdir(dir) else 'File'} does not exist: {dir}")
     if not os.path.exists(args.data_dir):
         raise ValueError(f"Root directory does not exist: {args.data_dir}")
     
     # Run main processing
     main(
-        summary_dir=args.summary_dir,
+        summary_dirs=args.summary_dirs,
         data_dir=args.data_dir,
         file_name=args.file_name,
         save_dir=args.save_dir,
