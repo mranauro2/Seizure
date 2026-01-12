@@ -376,15 +376,6 @@ def train(
                 val_metric   = array_val[0:until_epoch, index],
                 test_metric  = array_test[0:until_epoch, index] if (test_loader is not None) else None
             )
-            
-            if (SEIZURE_ANALYZER is not None):
-                intermediate = f"{folder_number}" if K_FOLD else ""
-                analyzer_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_NAME}_{epoch_num+START_EPOCH+1}")
-                analyzer_hist_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_HISTOGRAM_NAME}_{epoch_num+START_EPOCH+1}")
-                analyzer_ROC_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_ROC_NAME}_{epoch_num+START_EPOCH+1}")
-                SEIZURE_ANALYZER.save(analyzer_path)
-                SEIZURE_ANALYZER.plot_error_histograms(tau=0.5, show=False, save_path=analyzer_hist_path)
-                SEIZURE_ANALYZER.plot_roc_curve(show=False, save_path=analyzer_ROC_path)
         
         # conditions to save the model
         saved_files= []
@@ -398,6 +389,16 @@ def train(
             intermediate = f"{folder_number}" if K_FOLD else ""
             tsne_path = os.path.join(TSNE_SAVE_FOLDER, intermediate, f"{TSNE_NAME}_{epoch_num+START_EPOCH+1}")
             EmbeddingVisualizer.plot(tsne_projected, REDUCER.get_labels(), title="T-SNE", show=False, background=BackgroundColorsMethod.GRID, save_path=tsne_path, dpi=250)
+            
+            # save also when the model is wrong
+            if (SEIZURE_ANALYZER is not None):
+                intermediate = f"{folder_number}" if K_FOLD else ""
+                analyzer_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_NAME}_{epoch_num+START_EPOCH+1}")
+                analyzer_hist_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_HISTOGRAM_NAME}_{epoch_num+START_EPOCH+1}")
+                analyzer_ROC_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_ROC_NAME}_{epoch_num+START_EPOCH+1}")
+                SEIZURE_ANALYZER.save(analyzer_path)
+                SEIZURE_ANALYZER.plot_error_histograms(tau=0.5, show=False, save_path=analyzer_hist_path)
+                SEIZURE_ANALYZER.plot_roc_curve(show=False, save_path=analyzer_ROC_path)
             
             checkpoint_observer.update_saving(used_metric, saved_files)
         
