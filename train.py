@@ -5,6 +5,7 @@
 import torch
 from torch.utils.data import DataLoader, Subset
 
+from utils.classes.SeizureInferenceAnalyzer import SeizureInferenceAnalyzer
 from utils.classes.Checkpoint_manager import CheckPoint
 from utils.classes.Metric_manager import Metrics
 from utils.classes.Metrics_classes import *
@@ -54,6 +55,7 @@ STOP_FILE = "./stop_execution_{}.txt".format(generate_id(3))
 """Stop file to use to stop the execution and save the model without wait the checkpoint"""
 
 REDUCER:FeatureReducer= None
+SEIZURE_ANALYZER:SeizureInferenceAnalyzer= None
 DEVICE= "cpu"
 NUM_SEIZURE_DATA= 0
 NUM_NOT_SEIZURE_DATA= 0
@@ -138,7 +140,7 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     model.train(is_training)
     
     # init metrics
-    global REDUCER
+    global REDUCER, SEIZURE_ANALYZER
     average_smooth   = Loss_Meter("smooth")   if (DAMP_SMOOTH!=0)   else None
     average_degree   = Loss_Meter("degree")   if (DAMP_DEGREE!=0)   else None
     average_sparsity = Loss_Meter("sparsity") if (DAMP_SPARSITY!=0) else None
@@ -147,10 +149,11 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     accuracy         = Accuracy_Meter([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA], num_classes=NUM_CLASSES)
     conf_matrix      = ConfusionMatrix_Meter(NUM_CLASSES)
     REDUCER          = FeatureReducer()
+    SEIZURE_ANALYZER = SeizureInferenceAnalyzer()
      
     # enable or not the gradients
     with (torch.enable_grad() if is_training else torch.no_grad()):
-        for x,target,adj in (tqdm(data_loader, desc=f"{'Train' if model.training else 'Eval'} current epoch", leave=False) if show_progress else data_loader):
+        for x,(target,patient_id,distance_seizure),adj in (tqdm(data_loader, desc=f"{'Train' if model.training else 'Eval'} current epoch", leave=False) if show_progress else data_loader):
             x:Tensor= x.to(device=DEVICE)
             target:Tensor= target.to(device=DEVICE)
             adj:Tensor= adj.to(device=DEVICE)
@@ -180,6 +183,7 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
             accuracy.update(result, target)
             conf_matrix.update(result, target)
             REDUCER.add_feature(node_matrix, target)
+            SEIZURE_ANALYZER.append(result, target, distance_seizure, patient_id)
             
             loss_tuple:list[tuple[Loss_Meter,Tensor]]=[
                 (average_pred,     loss_pred),
@@ -372,6 +376,15 @@ def train(
                 val_metric   = array_val[0:until_epoch, index],
                 test_metric  = array_test[0:until_epoch, index] if (test_loader is not None) else None
             )
+            
+            if (SEIZURE_ANALYZER is not None):
+                intermediate = f"{folder_number}" if K_FOLD else ""
+                analyzer_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_NAME}_{epoch_num+START_EPOCH+1}")
+                analyzer_hist_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_HISTOGRAM_NAME}_{epoch_num+START_EPOCH+1}")
+                analyzer_ROC_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_ROC_NAME}_{epoch_num+START_EPOCH+1}")
+                SEIZURE_ANALYZER.save(analyzer_path)
+                SEIZURE_ANALYZER.plot_error_histograms(tau=0.5, show=False, save_path=analyzer_hist_path)
+                SEIZURE_ANALYZER.plot_roc_curve(show=False, save_path=analyzer_ROC_path)
         
         # conditions to save the model
         saved_files= []

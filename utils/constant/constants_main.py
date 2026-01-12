@@ -18,6 +18,9 @@ MODEL_SAVE_FOLDER= "./weights{}".format(PRETRAIN_SUFFIX if PRETRAIN else "")
 TSNE_SAVE_FOLDER= "./t-SNE"
 """Folder where the t-SNE projection will be saved"""
 
+ANALYZER_SAVE_FOLDER= "./analyzer"
+"""Folder where the inference-time predictions analysis and ROC curve will be saved"""
+
 SCALER_SAVE_FOLDER= "./scalers_weight"
 """Folder where save the values calculates with the scalar"""
 
@@ -29,6 +32,15 @@ EPOCH_FOLDER_NAME= "epoch"
 
 TSNE_NAME= "t-SNE"
 """Name of the t-SNE projection file where the image will be saved"""
+
+ANALYZER_NAME= "analysis"
+"""Name of the inference-time predictions analysis file as numpy array will be saved"""
+
+ANALYZER_HISTOGRAM_NAME= "analysis_hist"
+"""Name of the inference-time predictions analysis file where the image will be saved"""
+
+ANALYZER_ROC_NAME= "analysis_ROC"
+"""Name of the ROC curve file where the image will be saved"""
 
 MODEL_EXTENTION= "pth"
 """Extention of the model weights"""
