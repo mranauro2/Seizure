@@ -216,6 +216,7 @@ model/loss/OK
 model/loss/results
 model/loss/results_norm
 not_used/
+eeg_visualizer/
 PositionalEncoding2D-master/
 utils/plot_scaler.ipynb
 dataset_split.ipynb
@@ -226,3 +227,5 @@ utils/rename_all.py
 transformer.ipynb
 utils/mean_max_epochs.ipynb
 patient_specific.ipynb
+eeg_visualizer.ipynb
+test_3.ipynb
