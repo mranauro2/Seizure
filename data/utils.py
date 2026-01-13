@@ -138,9 +138,68 @@ def compute_FFT(signals:np.ndarray, n:int) -> tuple[np.ndarray, np.ndarray]:
 
     return FT, P
 
+def process_eeg_clip(clipped_signal:np.ndarray, clip_len:int, time_step_size:int, use_fft:bool) -> np.ndarray:
+    """
+    Process a raw EEG signal clip, optionally applying FFT transformation.
+    
+    Args:
+        clipped_signal (np.ndarray): EEG signal with shape:
+            - Raw format: (num_channels, clip_len * FREQUENCY_CHB_MIT)
+            - Processed format: (clip_len, num_channels, FREQUENCY_CHB_MIT)
+        clip_len (int):              Total duration of the EEG clip in seconds
+        time_step_size (int):        Duration of each time step in seconds for FFT analysis
+        use_fft (bool):              If True, apply FFT to generate time-frequency representation
+    
+    Returns:
+        eeg_clip (np.ndarray): Processed EEG clip with shape:
+            - Without FFT: (clip_len, num_channels, FREQUENCY_CHB_MIT)
+            - With FFT: (clip_len, num_channels, FREQUENCY_CHB_MIT//2)
+    """
+    physical_time_step_size = FREQUENCY_CHB_MIT * time_step_size
+    
+    if (clipped_signal.ndim == 3):
+        if not use_fft:
+            return clipped_signal
+        
+        else:
+            # Apply FFT to already processed data
+            num_channels = clipped_signal.shape[1]
+            feature_dim = FREQUENCY_CHB_MIT // 2
+            eeg_clip = np.empty((clip_len, num_channels, feature_dim))
+            
+            for t in range(clip_len):
+                eeg_clip[t], _ = compute_FFT(signals=clipped_signal[t], n=physical_time_step_size)
+            
+            return eeg_clip
+    
+    elif (clipped_signal.ndim == 2):
+        num_channels = clipped_signal.shape[0]
+        
+        # create empty clip of size (clip_len, num_channels, feature_dim)
+        feature_dim = FREQUENCY_CHB_MIT // 2 if use_fft else FREQUENCY_CHB_MIT
+        eeg_clip = np.empty((clip_len, num_channels, feature_dim))
+        
+        # if not use the FFT then the output has only different shape and different order of the axis
+        # reshape from (num_channels, clip_len*feature_dim) to (clip_len, num_channels, feature_dim)
+        if not use_fft:
+            eeg_clip = clipped_signal.reshape(num_channels, clip_len, feature_dim).transpose((1, 0, 2))
+        
+        # if use the FFT then is necessary to compute the FFT for each time step
+        else:
+            for t in range(clip_len):
+                start_time_step = t * physical_time_step_size
+                end_time_step = start_time_step + physical_time_step_size
+                
+                eeg_clip[t], _ = compute_FFT(signals=clipped_signal[:, start_time_step:end_time_step], n=physical_time_step_size)
+        
+        return eeg_clip
+    
+    else:
+        raise ValueError("Invalid clipped_signal shape: {}. Expected 2D or 3D shape but got {}-D".format(clipped_signal.shape, clipped_signal.ndim))
+
 def compute_slice_matrix(file_name:str, clip_idx:int, time_step_size:int=1, clip_len:int=60, use_fft:bool=False) -> np.ndarray:
     """
-    Extract and process an EEG clip from an HDF5 file.
+    Extract and process an EEG clip from a file.
     The function extracts a clip of specified length from resampled EEG data and optionally applies FFT processing to generate time-frequency representations.
     
     Args:
@@ -158,7 +217,6 @@ def compute_slice_matrix(file_name:str, clip_idx:int, time_step_size:int=1, clip
 
     # calculate physical dimensions
     physical_clip_len = FREQUENCY_CHB_MIT * clip_len
-    physical_time_step_size = FREQUENCY_CHB_MIT * time_step_size
     
     start_window = clip_idx * physical_clip_len
     end_window = start_window + physical_clip_len
@@ -166,23 +224,9 @@ def compute_slice_matrix(file_name:str, clip_idx:int, time_step_size:int=1, clip
     # extract clipped signal (num_channels, physical_clip_len)
     clipped_signal = signal_array[:, start_window:end_window]
     
-    # create empty clip of size (clip_len, num_channels, feature_dim)
-    feature_dim= FREQUENCY_CHB_MIT//2 if use_fft else FREQUENCY_CHB_MIT
-    eeg_clip= np.empty((clip_len, signal_array.shape[0], feature_dim))
+    # process the clipped signal
+    eeg_clip = process_eeg_clip(clipped_signal, clip_len, time_step_size, use_fft)
     
-    # if not use the FFT then the output has only different shape and different order of the axis
-    # reshape from (num_signal, clip_len*feature_dim) to (clip_len, num_signal, feature_dim)
-    if not use_fft:
-        eeg_clip= clipped_signal.reshape(signal_array.shape[0], clip_len, feature_dim).transpose((1, 0, 2))
-
-    # if use the FFT then is necessary to compute the FFT for each time step
-    else:
-        for t in range(clip_len):
-            start_time_step = t*physical_time_step_size
-            end_time_step = start_time_step + physical_time_step_size
-            
-            eeg_clip[t], _ = compute_FFT(signals=clipped_signal[:, start_time_step:end_time_step], n=physical_time_step_size)
-
     return eeg_clip
 
 def compute_plv_matrix(graph: np.ndarray) -> np.ndarray:

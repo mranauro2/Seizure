@@ -62,7 +62,7 @@ class BaseSeizureDataset(Dataset, ABC):
             use_fft (bool):                     Use the Fast Fourier Transform when obtain the slice from the file
             use_fft_adj (bool):                 Calculate the adjacency matrix using the matrix after the FFT
             
-            preprocess_data (str):              Directory to the preprocess data. If it is not None `input_dir`, `time_step_size`, `max_seq_len`, `use_fft`, `use_fft_adj` will not be considered
+            preprocess_data (str):              Directory to the preprocess data. If it is not None `input_dir`, `time_step_size`, `max_seq_len` will not be considered
             
             scaler (Scaler):                    Scaler to normalize the data. It will be applied after the Fast Fourier Transform (if present) and before the computation of the adjacency matrix
             method (str):                       How to compute the adjacency matrix
@@ -74,22 +74,18 @@ class BaseSeizureDataset(Dataset, ABC):
         if not(method==SeizureDatasetMethod.LAPLACIAN) and (lambda_value is not None):
             msg = "The parameter lambda_value is ignored because the attention is not set {}".format(SeizureDatasetMethod.LAPLACIAN.name)
             warnings.warn(msg)
+        if (preprocess_data is not None) and (input_dir is not None):
+            warnings.warn("'preprocess_data' and 'input_dir' are not None. 'input_dir' will be ignored")
         if (preprocess_data is not None):
-            ignored_parameters = []
-            if (input_dir is not None):
-                ignored_parameters.append('input_dir')
-            if (time_step_size is not None):
-                ignored_parameters.append('time_step_size')
-            if (max_seq_len is not None):
-                ignored_parameters.append('max_seq_len')
+            used_parameters = []
             if (use_fft is not None):
-                ignored_parameters.append('use_fft')
+                used_parameters.append('use_fft')
             if (use_fft_adj is not None):
-                ignored_parameters.append('use_fft_adj')
-                use_fft_adj = use_fft
-            if len(ignored_parameters)>0:
-                msg = "'preprocess_data' is not None. The passed following parameters are passed but ignored: '{}'".format("', '".join(ignored_parameters))
-                warnings.warn(msg)
+                used_parameters.append('use_fft_adj')
+            msg = "'preprocess_data' is not None. The following parameters are passed but the raw data could be anything: '{}'".format("', '".join(used_parameters))
+            warnings.warn(msg)
+        if (preprocess_data is not None) and ((time_step_size is None) or (max_seq_len is None)):
+            raise ValueError("'preprocess_data' is not None, so also 'time_step_size' and 'max_seq_len' must be not None")
         
         # save parameters
         self.input_dir = input_dir
@@ -175,8 +171,13 @@ class BaseSeizureDataset(Dataset, ABC):
 
     def _load_clip(self, file_name:str, index:int, use_fft:bool=None) -> np.ndarray:
         """Load a clip given its file_name and its index (can be not present)"""
-        if self.preprocess_data is not None:
-            eeg_clip = np.load(file_name)
+        if (self.preprocess_data is not None):
+            eeg_clip = utils.process_eeg_clip(
+                clipped_signal  = np.load(file_name),
+                clip_len        = self.max_seq_len,
+                time_step_size  = self.time_step_size,
+                use_fft         = use_fft
+            )
         else:
             eeg_clip = utils.compute_slice_matrix(
                 file_name       = os.path.join(self.input_dir, file_name),
