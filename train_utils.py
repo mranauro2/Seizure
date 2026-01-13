@@ -188,7 +188,6 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
         dataset:
     """
     string_additional_info= additional_info(
-        preprocessed_data=(preprocess_dir is not None),
         dataset_data=[
             ('method', method),
             ('lambda_value', lambda_value),
@@ -422,21 +421,17 @@ def dict_to_str(list_to_print:list[tuple[str,Any]], print_none:bool=False, print
         string += "\t{} : {}\n".format(name.ljust(ljust_value), value)
     return string
 
-def additional_info(preprocessed_data:bool, dataset_data:list[tuple[str,Any]]) -> str:
+def additional_info(dataset_data:list[tuple[str,Any]]) -> str:
     """Extract static additionl info"""
     # DATASET
-    dataset_tuple_no_preprocess = [
+    dataset_tuple = [
         ("MAX_SEQ_LEN", MAX_SEQ_LEN),
         ("TIME_STEP_SIZE", TIME_STEP_SIZE),
         ("USE_FFT", USE_FFT),
-        ("USE_FFT_ADJ", USE_FFT_ADJ)
-    ]
-    dataset_tuple = [
+        ("USE_FFT_ADJ", USE_FFT_ADJ),
         ("TOP_K", TOP_K),
         *dataset_data
     ]
-    if not(preprocessed_data):
-        dataset_tuple.extend(dataset_tuple_no_preprocess)
     dataset_str = "Dataset info:\n{}".format(dict_to_str(dataset_tuple))
     
     # MODEL
