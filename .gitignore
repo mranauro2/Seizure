@@ -212,6 +212,7 @@ test_2.ipynb
 metrics/
 others/
 images/
+adj/
 model/loss/OK
 model/loss/results
 model/loss/results_norm

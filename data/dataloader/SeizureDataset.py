@@ -332,9 +332,11 @@ class SeizureDatasetDetection(BaseSeizureDataset):
             index (int):    Index in [0, 1, ..., size_of_dataset-1]
             
         Returns:
-            tuple (Tensor, tuple[Tensor, Tensor], Tensor):     The triplets is:
+            tuple (Tensor, tuple[Tensor, str, float], Tensor):
                 - Feature/node matrix with shape (max_seq_len, num_channels, feature_dim)
-                - Target of the current graph and distance from the nearest seizure event
+                - Target of the current graph
+                - Patient id
+                - Distance from the nearest seizure event
                 - Adjacency matrix with shape (num_channels, num_channels)
         
         Notes:

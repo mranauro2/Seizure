@@ -66,6 +66,7 @@ class SeizureInferenceAnalyzer:
             "patient_id": self._patient_id,
         })
 
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         df.to_csv(filepath, index=False)
 
     @staticmethod

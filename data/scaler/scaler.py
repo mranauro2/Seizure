@@ -115,7 +115,7 @@ class MinMaxScaler(Scaler):
     
     @property
     def max(self) -> torch.Tensor:
-        return self.max_array
+        return self.max_array.to(device=self.device)
     
     @max.setter
     def max(self, value:Tensor) -> None:
@@ -123,7 +123,7 @@ class MinMaxScaler(Scaler):
         
     @property
     def min(self) -> Tensor:
-        return self.min_array
+        return self.min_array.to(device=self.device)
     
     @min.setter
     def min(self, value:Tensor) -> None:
@@ -148,7 +148,7 @@ class MinMaxScaler(Scaler):
         if ( len(dataset)==0 ):
             raise ValueError("The dataset is empty")
         device= device if (device is not None) else self.device
-        dataloader = DataLoader(dataset, batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device=='cuda'))
+        dataloader = DataLoader(dataset, batch_size, shuffle=False, num_workers=num_workers)
         
         reduction_dim = None if single_value else 1
         
@@ -224,7 +224,7 @@ class StandardScaler(Scaler):
     
     @property
     def mean(self) -> Tensor:
-        return self.mean_array
+        return self.mean_array.to(device=self.device)
 
     @mean.setter
     def mean(self, value:Tensor) -> None:
@@ -232,7 +232,7 @@ class StandardScaler(Scaler):
     
     @property
     def std(self) -> Tensor:
-        return self.std_array
+        return self.std_array.to(device=self.device)
     
     @std.setter
     def std(self, value:Tensor) -> None:
@@ -255,7 +255,7 @@ class StandardScaler(Scaler):
             num_workers (int):                              Number of subprocesses for data loading
         """
         device= device if (device is not None) else self.device
-        dataloader = DataLoader(dataset, batch_size, shuffle=False, num_workers=num_workers, pin_memory=(device=='cuda'))
+        dataloader = DataLoader(dataset, batch_size, shuffle=False, num_workers=num_workers)
         
         reduction_dim = None if single_value else 1
         
