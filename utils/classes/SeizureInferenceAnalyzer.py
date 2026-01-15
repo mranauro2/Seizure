@@ -291,7 +291,7 @@ class SeizureInferenceAnalyzer:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             if not(save_path.endswith(".png")):
                 save_path = save_path + ".png"
-            fig.savefig(save_path, dpi=200, format="png")
+            fig.savefig(save_path, dpi=200, format="png", bbox_inches="tight")
         
         if show:
             plt.show()
