@@ -359,7 +359,6 @@ class SeizureDatasetDetection(BaseSeizureDataset):
 
         # apply scaler if present
         eeg_clip = self._apply_scaler(eeg_clip)
-        eeg_clip_for_adj = self._apply_scaler(eeg_clip_for_adj)
 
         # construct adjacency matrix
         adj = self._compute_adj(eeg_clip_for_adj)
@@ -478,7 +477,6 @@ class SeizureDatasetPrediction(BaseSeizureDataset):
         
         # apply scaler if present
         eeg_clip = self._apply_scaler(eeg_clip)
-        eeg_clip_for_adj = self._apply_scaler(eeg_clip_for_adj)
 
         # construct adjacency matrix
         adj = self._compute_adj(eeg_clip_for_adj)
