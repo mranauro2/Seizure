@@ -144,8 +144,7 @@ class SGLC_Cell(nn.Module):
                 - Update adjacency matrix with same size
                 - Update hidden state matrix with same size (present only if `use_GRU` is True)
         """
-        raw_adj = self.graph_learner(inputs, supports)
-        adj = torch.softmax(raw_adj, dim=-1)
+        adj = self.graph_learner(inputs, supports)
         supports = self.graph_skip_conn * supports + (1 - self.graph_skip_conn) * adj
         
         # if use_GRU compute the concatenation of inputs and state, then use the GRU module

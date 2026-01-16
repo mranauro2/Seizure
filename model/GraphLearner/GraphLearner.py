@@ -92,13 +92,13 @@ class GraphLearner(nn.Module):
         match self.attention_type:
             case GraphLearnerAttention.GRAPH_ATTENTION_LAYER:
                 self.att = self._build_graph_attention(input_size, hidden_size, num_layers, num_nodes, num_heads, dropout, act, v2, device=device)
-                self.forward = self._forward_graph_attention
+                self._inner_forward = self._forward_graph_attention
             case GraphLearnerAttention.GAT:
                 self.att = self._build_gat(input_size, hidden_size, num_layers, num_nodes, num_heads, dropout, act, v2, device=device)
-                self.forward = self._forward_gat
+                self._inner_forward = self._forward_gat
             case GraphLearnerAttention.TRANSFORMER_CONV:
                 self.att = self._build_transformers(input_size, hidden_size, num_layers, num_nodes, num_heads, dropout, act, concat, beta, device=device)
-                self.forward = self._forward_transformer
+                self._inner_forward = self._forward_transformer
             case _:
                 raise NotImplementedError("Attention {} is not implemented yet".format(self.attention_type))
         
@@ -243,7 +243,19 @@ class GraphLearner(nn.Module):
             :param adj (Tensor):        Adjacency matrix with size (batch_size, num_nodes, num_nodes)
             :return attention (Tensor): Adjacency attention matrix with size (batch_size, num_nodes, num_nodes)
         """
-        raise NotImplementedError("This function is only a decoration")
+        attention = self._inner_forward(context, adj)
+        
+        attention = torch.where(attention>0, attention, -INF)
+        
+        if self.use_sigmoid:
+            attention = torch.sigmoid(attention)
+        
+        attention = torch.softmax(attention, dim=-1)
+        if (self.epsilon is not None):
+            attention = self._build_epsilon_neighbourhood(attention)
+        
+        return attention
+        
     
     def _forward_graph_attention(self, context:Tensor, adj:Tensor) -> Tensor:
         """
@@ -268,14 +280,6 @@ class GraphLearner(nn.Module):
             attention.append(attention_head)
 
         attention = torch.mean(torch.stack(attention, 0), 0)
-
-        # Modify the attention matrix by setting values below epsilon to a marker
-        if self.epsilon is not None:
-            attention = self._build_epsilon_neighbourhood(attention)
-
-        if self.use_sigmoid:
-            attention = torch.sigmoid(attention)
-        
         return attention
 
     def _forward_gat(self, context:Tensor, adj:Tensor) -> Tensor:
@@ -292,14 +296,6 @@ class GraphLearner(nn.Module):
         
         # Reshape (batch_size * num_nodes, num_nodes) --> (batch_size, num_nodes, num_nodes)
         attention = attention_batched.reshape(batch_size, num_nodes, -1)
-
-        # Modify the attention matrix by setting values below epsilon to a marker
-        if self.epsilon is not None:
-            attention = self._build_epsilon_neighbourhood(attention)
-        
-        if self.use_sigmoid:
-            attention = torch.sigmoid(attention)
-        
         return attention
     
     def _forward_transformer(self, context:Tensor, adj:Tensor) -> Tensor:
@@ -322,14 +318,6 @@ class GraphLearner(nn.Module):
                 attention_batched = layer.forward(attention_batched)
         
         attention = attention_batched.reshape(batch_size, num_nodes, -1)
-
-        # Modify the attention matrix by setting values below epsilon to a marker
-        if self.epsilon is not None:
-            attention = self._build_epsilon_neighbourhood(attention)
-        
-        if self.use_sigmoid:
-            attention = torch.sigmoid(attention)
-        
         return attention
     
     def _create_batch(self, context:Tensor, adj:Tensor) -> tuple[Tensor, Tensor, Tensor]:
