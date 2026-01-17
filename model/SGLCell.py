@@ -32,7 +32,8 @@ class SGLC_Cell(nn.Module):
             type_GGNN:GGNNType=GGNNType.PROPAGATOR,
             num_steps:int=5,
             num_GGNN_layers:int=1,
-            act_GGNN:str|Callable=None,
+            act_mid_GGNN:str|Callable=None,
+            act_last_GGNN:str|Callable=None,
             v2_GGNN:bool=False,
             num_GGNN_heads:int=0,
             
@@ -61,7 +62,8 @@ class SGLC_Cell(nn.Module):
             type_GGNN (GGNNType):                   Type of module to use in the Gated Graph Neural Networks module
             num_steps (int):                        Number of propagation steps in the Gated Graph Neural Networks module
             num_GGNN_layers (int):                  Number of Propagation modules in the Gated Graph Neural Networks module
-            act_GGNN (str|Callable):                The non-linear activation function to use inside the linear activation function in the Gated Graph Neural Networks module. If None use the default class value
+            act_mid_GGNN (str|Callable):            The non-linear activation function to use between the two fully-connected layers in the Gated Graph Neural Networks module, if provided
+            act_last_GGNN (str|Callable):           The non-linear activation function to use after the second fully-connected layers in the Gated Graph Neural Networks module, if provided
             v2_GGNN (bool):                         Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
             num_GGNN_heads (int):                   Number of heads for multi-head attention in the Gated Graph Neural Networks module
             
@@ -96,9 +98,6 @@ class SGLC_Cell(nn.Module):
             **kwargs_graph_learner
         )
         
-        GGNN_kwargs = {}
-        if act_GGNN is not None:
-            GGNN_kwargs['act'] = act_GGNN
         GGNN_input= (input_dim + hidden_dim_GGNN) if use_GRU else (input_dim)
         self.ggnn = GGNNLayer(
             input_dim   = GGNN_input,
@@ -109,9 +108,10 @@ class SGLC_Cell(nn.Module):
             num_layers  = num_GGNN_layers,
             v2          = v2_GGNN,
             num_heads   = num_GGNN_heads,
+            act_mid     = act_mid_GGNN,
+            act_last    = act_last_GGNN,
             seed        = seed,
-            device      = device,
-            **GGNN_kwargs
+            device      = device
         )
         
         if self.use_GRU:
@@ -156,7 +156,7 @@ class SGLC_Cell(nn.Module):
             ], dim=2)
             ggnn_input= ggnn_input.reshape(batch_size, -1)
             
-            inputs = torch.sigmoid(self.ggnn(ggnn_input, supports))
+            inputs = self.ggnn(ggnn_input, supports)
             state= self.gru(inputs, state)
             
             return inputs, supports, state

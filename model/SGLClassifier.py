@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch_geometric.nn.resolver import activation_resolver
 
 from model.SGLCEncoder import SGLC_Encoder
 from model.GatedGraphNeuralNetworks import GGNNType
@@ -8,6 +9,7 @@ from model.GraphLearner.GraphLearnerAttention import GraphLearnerAttention
 from model.Transformer.Transformer import Transformer, TransformerType, PositionalEncodingType
 
 import os
+import inspect
 import warnings
 from enum import Enum
 from copy import deepcopy
@@ -42,7 +44,8 @@ class SGLC_Classifier(nn.Module):
             type_GGNN:GGNNType=GGNNType.PROPAGATOR,
             num_steps:int=5,
             num_GGNN_layers:int=1,
-            act_GGNN:str|Callable=None,
+            act_mid_GGNN:str|Callable=None,
+            act_last_GGNN:str|Callable=None,
             v2_GGNN:bool=False,
             num_GGNN_heads:int=0,
             
@@ -88,7 +91,8 @@ class SGLC_Classifier(nn.Module):
             type_GGNN (GGNNType):                           Type of module to use in the Gated Graph Neural Networks module
             num_steps (int):                                Number of propagation steps in the Gated Graph Neural Networks module
             num_GGNN_layers (int):                          Number of Propagation modules in the Gated Graph Neural Networks module
-            act_GGNN (str|Callable):                        The non-linear activation function to use inside the linear activation function in the Gated Graph Neural Networks module. If None use the default class value
+            act_mid_GGNN (str|Callable):                    The non-linear activation function to use between the two fully-connected layers in the Gated Graph Neural Networks module, if provided
+            act_last_GGNN (str|Callable):                   The non-linear activation function to use after the second fully-connected layers in the Gated Graph Neural Networks module, if provided
             v2_GGNN (bool):                                 Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
             num_GGNN_heads (int):                           Number of heads for multi-head attention in the Gated Graph Neural Networks module
             
@@ -145,7 +149,8 @@ class SGLC_Classifier(nn.Module):
             type_GGNN       = type_GGNN,
             num_steps       = num_steps,
             num_GGNN_layers = num_GGNN_layers,
-            act_GGNN        = act_GGNN,
+            act_mid_GGNN    = act_mid_GGNN,
+            act_last_GGNN   = act_last_GGNN,
             v2_GGNN         = v2_GGNN,
             num_GGNN_heads  = num_GGNN_heads,
             
@@ -312,6 +317,31 @@ class SGLC_Classifier(nn.Module):
             result = self._forward_result(input_seq)    
             return result, input_seq, supports
 
+    def _extract_activation_params(self, activation:str|nn.Module):
+        """
+        Extract the class name and init parameters from an activation instance. It will accept also a string as class name
+            :returns dictionary (dict[str,any]): Dictionary with keys 'name' (has as value a string) and 'kwargs' (has as value a dictionary)
+        """
+        if (activation is None):
+            return None
+        if not(isinstance(activation, nn.Module)):
+            return {'name': activation, 'kwargs': {}}
+        
+        class_name = activation.__class__.__name__                          # Get the class name
+        sig = inspect.signature(activation.__class__.__init__)              # Get the signature of __init__
+        
+        # Extract parameter values
+        kwargs = {}
+        for param_name in sig.parameters.keys():
+            if param_name == 'self':
+                continue
+            if hasattr(activation, param_name):
+                value = getattr(activation, param_name)                     # Try to get the attribute from the instance
+                if isinstance(value, (int, float, str, bool, type(None))):  # Only save JSON-serializable types
+                    kwargs[param_name] = value
+        
+        return {'name': class_name, 'kwargs': kwargs}
+    
     def save(self, filepath:str) -> None:
         """
         Save the model's state dictionary and configuration to a file.
@@ -324,6 +354,10 @@ class SGLC_Classifier(nn.Module):
                 if isinstance(value, Enum):
                     value = value.name
                     accepted = True
+                elif isinstance(value, nn.Module):
+                    value = self._extract_activation_params(value)
+                    accepted = True
+                    
             if not(accepted):
                 raise TypeError("Key '{}' has class {} but one of the following classes are expected {}".format(key, type(value), ", ".join([str(_type) for _type in accepted_types])))
             
@@ -364,9 +398,11 @@ class SGLC_Classifier(nn.Module):
             
             if isinstance(value, value_class):
                 return value
-            if issubclass(value_class, Enum) and isinstance(value, str):
+            elif issubclass(value_class, Enum) and isinstance(value, str):
                 return value_class[value]
-            if isinstance(value, NoneType):
+            elif isinstance(value, dict):
+                return activation_resolver(value['name'], **value['kwargs'])
+            elif isinstance(value, NoneType):
                 return None
             raise TypeError("Key '{}' cannot be converted".format(key))
         
@@ -390,7 +426,7 @@ class SGLC_Classifier(nn.Module):
         dict_to_load:dict[str,any] = {}
         for key in conf.keys():
             conf_value = _from_value_to_type(key, conf[key], type(self.params[key]))
-            if conf_value != self.params[key]:
+            if (conf_value != self.params[key]) and (str(conf_value) != str(self.params[key])):
                 msg ="Key '{}' has value ({}) but ({}) was expected".format(key, self.params[key], conf_value)
                 if strict:
                     raise ValueError(msg)

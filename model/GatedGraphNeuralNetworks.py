@@ -94,7 +94,8 @@ class GGNNLayer(nn.Module):
             num_steps:int,
             num_layers:int=1,
             
-            act:str|Callable=nn.LeakyReLU(negative_slope=0.2),
+            act_mid:str|Callable=None,
+            act_last:str|Callable=None,
             
             seed:int=None,
             device:str=None,
@@ -107,27 +108,31 @@ class GGNNLayer(nn.Module):
         """
         Use iterative propagation with the GRU mechanism to learn a new representation of the feature/node matrix.
         Args:
-            input_dim (int):        Dimension of input node features
-            num_nodes (int):        Number of nodes in both input graph and hidden state
-            output_dim (int):       Dimension chosen for the output of the new feature/node matrix
+            input_dim (int):            Dimension of input node features
+            num_nodes (int):            Number of nodes in both input graph and hidden state
+            output_dim (int):           Dimension chosen for the output of the new feature/node matrix
             
-            type (GGNNType):        Type of module to use
-            num_steps (int):        Number of propagation iterations
-            num_layers (int):       Number of Propagation modules
+            type (GGNNType):            Type of module to use
+            num_steps (int):            Number of propagation iterations
+            num_layers (int):           Number of Propagation modules
             
-            act (str|Callable):     The non-linear activation function to use inside the linear activation function. The last layer of has not activation function
-            seed (int):             Sets the seed for the weights initializations. If None, don't use any seed
-            device (str):           Device to place the model on
+            act_mid (str|Callable):     The non-linear activation function to use between the two fully-connected layers, if provided
+            act_last (str|Callable):    The non-linear activation function to use after the second fully-connected layers, if provided
+            seed (int):                 Sets the seed for the weights initializations. If None, don't use any seed
+            device (str):               Device to place the model on
             
-            v2 (bool):              Use GATV2 instead of GAT for the multi-head attention
-            num_heads (int):        Number of heads for multi-head attention
+            v2 (bool):                  Use GATV2 instead of GAT for the multi-head attention
+            num_heads (int):            Number of heads for multi-head attention
         """
         super(GGNNLayer, self).__init__()
         self.input_dim = input_dim
         self.num_nodes = num_nodes
         self.output_dim = output_dim
         self.num_steps = num_steps
-        act = activation_resolver(act)
+        if (act_mid is not None):
+            act_mid = activation_resolver(act_mid)
+        if (act_last is not None):
+            act_last = activation_resolver(act_last)
         
         # print errors
         if (type == GGNNType.GAT) and ( (num_heads is None) or (num_heads <= 0) ):
@@ -163,7 +168,14 @@ class GGNNLayer(nn.Module):
             case _:
                 raise NotImplementedError("Type {} is not implemented yet".format(type))
         
-        self.fc = nn.Sequential(nn.Linear(input_dim, output_dim*4, device=device), act, nn.Linear(output_dim*4, output_dim, device=device))
+        modules = []
+        modules.append(nn.Linear(input_dim, output_dim*4, device=device))
+        if (act_mid is not None):
+            modules.append(act_mid)
+        modules.append(nn.Linear(output_dim*4, output_dim, device=device))
+        if (act_last is not None):
+            modules.append(act_last)
+        self.fc = nn.Sequential(*modules)
         
         if (seed is not None):
             torch.manual_seed(seed)

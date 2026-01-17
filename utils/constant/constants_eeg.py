@@ -4,6 +4,7 @@ from model.Transformer.PositionalEncoding import PositionalEncodingType
 from model.Transformer.TransformerType import TransformerType
 from model.GatedGraphNeuralNetworks import GGNNType
 from data.dataloader.SeizureAugmentation import *
+from torch import nn
 import numpy as np
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -38,7 +39,7 @@ USE_FFT= True
 """Used in :data:`data.dataloader.SeizureDataset` \\
 Use the Fast Fourier Transform when obtain the slice from the file"""
 
-USE_FFT_ADJ= True
+USE_FFT_ADJ= False
 """Used in :data:`data.dataloader.SeizureDataset` \\
 Compute the adjacency matrix after the Fast Fourier Transform on the slice from the file"""
 
@@ -70,13 +71,13 @@ Set the augmentation to use inside the dataset"""
 # DAMPING FACTOR FOR LOSS FUNCTIONS
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-DAMP_DEGREE= 1.0
+DAMP_DEGREE= 0.0
 """Damping factor for :func:`model.loss_functions.degree_regularization_loss_func`. Set to 0 to not use it"""
 
-DAMP_SMOOTH= 1.0
+DAMP_SMOOTH= 0.0
 """Damping factor for :func:`model.loss_functions.smoothness_loss_func`. Set to 0 to not use it"""
 
-DAMP_SPARSITY= 1.0
+DAMP_SPARSITY= 0.0
 """Damping factor for :func:`model.loss_functions.sparsity_loss_func`. Set to 0 to not use it"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -114,39 +115,39 @@ Use a new hidden state instead of the encoder hidden state. To use (only if `USE
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # GRAPH LEARNER VALUES
 
-HIDDEN_DIM_GL= 192
+HIDDEN_DIM_GL= 70
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Hidden dimension for the :data:`model.GraphLearner.GraphLearner` module"""
 
-ATTENTION_TYPE= GraphLearnerAttention.GAT
+ATTENTION_TYPE= GraphLearnerAttention.GRAPH_ATTENTION_LAYER
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Type of attention used in the :data:`model.GraphLearner.GraphLearner` module"""
 
-NUM_GL_LAYERS= 3
+NUM_GL_LAYERS= 1
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Number of message passing layers in the GAT or Transformer module for the :data:`model.GraphLearner.GraphLearner` module"""
 
-NUM_GL_HEADS= 8
+NUM_GL_HEADS= 1
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Number of heads for multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
-GL_DROPOUT= 0.4
+GL_DROPOUT= 0.3
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Dropout probability applied in the attention layer for the :data:`model.GraphLearner.GraphLearner` module"""
 
-EPSILON= 1e-10
+EPSILON= 0.3
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Threshold for deleting weak connections in the learned graph for the :data:`model.GraphLearner.GraphLearner` module. If None, no deleting is applied"""
 
-GL_ACT= 'relu'
+GL_ACT= nn.LeakyReLU(0.2)
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Non-linear activation function to use in the :data:`model.GraphLearner.GraphLearner` module"""
 
-USE_SIGMOID= True
+USE_SIGMOID= False
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Use the sigmoid as activation function after the computation of the attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
-USE_GL_GATv2= True
+USE_GL_GATv2= False
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
@@ -216,9 +217,13 @@ NUM_GGNN_LAYERS= 1
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Number of propagation modules in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
-ACT_GGNN= None
+ACT_MID_GGNN= None
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
-Non-linear activation function to use inside the linear activation in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module. If None use the default class value"""
+Non-linear activation function to use between the two fully-connected layers in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
+ACT_LAST_GGNN= None
+"""Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
+Non-linear activation function to use after the second fully-connected layers in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
 NUM_GGNN_HEADS= 0
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
