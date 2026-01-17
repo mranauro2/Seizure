@@ -541,6 +541,34 @@ def k_fold_split_patient_data(
     
     return k_fold
 
+def split_nested_dicts(data:list[tuple[dict[str,list[int]], dict[str,list[int]]]], n: int) -> list[tuple[dict[str,list[int]], dict[str,list[int]], dict[str,list[int]]]]:
+    """
+    Transform a list of tuple(train_dict, val_dict) into a list of tuple(train_dict, val_dict, test_dict)
+    
+    Args:
+        data (list[tuple[dict[str, list[int]], dict[str, list[int]]]]): Original data to split
+        n (int):                                                        Number of last keys to move from `val_dict` to `test_dict`
+    
+    Returns:
+        out (list[tuple[dict[str,list[int]], dict[str,list[int]], dict[str,list[int]]]]):   New data splitted
+    """    
+    transformed_list = []
+
+    for train_dict, val_dict in data:
+        items = list(val_dict.items())
+        split_index = len(items)-n
+        
+        if split_index <= 0:
+            raise ValueError("Cannot split the data. Of the {} keys, {} were needed".format(len(items), n))
+        
+        # Create the two new dictionaries from the slices
+        val_dict_new = dict(items[:split_index])
+        test_dict = dict(items[split_index:])
+        
+        transformed_list.append((train_dict, val_dict_new, test_dict))
+        
+    return transformed_list
+
 def split_patient_data_specific(patient_data:dict[str,Any], patient_ids:list[str]) -> tuple[dict[str,Any], dict[str,Any]]:
     """
     This function removes a subset of patients from the original dictionary and returns two dictionaries:
@@ -669,7 +697,7 @@ def subsets_from_patient_splits(dataset:Dataset, patient_to_indices:dict[str,lis
     Args:
         dataset (Dataset):                              Original dataset
         patient_to_indices (dict[str, list[int]])):     Dictionary with patient_id as key and list of indeces as value (from original dataset)
-        set_splitted (dict[str,list[int]]):             Dictionary with patient_id as key and list of labels of integers as value
+        set_splitted (dict[str,list[int]]):             Dictionary with patient_id as key and list of labels of integers as value. Only the keys will be used
 
     Returns:
         Subset: Subset from the split
