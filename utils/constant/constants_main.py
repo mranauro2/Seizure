@@ -64,16 +64,19 @@ VAL_PATIENT_IDS= None # ["chb10", "chb13", "chb14"]
 EXCEPT_DATA= ["chb16"]
 """List of ids of patient which are not allowed to be in the dataset"""
 
-K_FOLD= 3
-"""Number of patients to use for each fold in the k-fold cross validation""" 
+K_FOLD_VAL= 2
+"""Number of patients to use for each fold in the k-fold cross validation"""
 
-PATIENT_SPECIFIC= "chb01"
+K_FOLD_TEST= 1
+"""Number of patients to use for each fold in the k-fold cross test""" 
+
+PATIENT_SPECIFIC= None # "chb01"
 """Patient specific to use for a k-fold training"""
 
 PERCENTAGE_TRAINING_SPLIT= 0.8
 """How much of the dataset must be used only for training"""
 
-PERCENTAGE_BOTH_CLASS_IN_BATCH= 10
+PERCENTAGE_BOTH_CLASS_IN_BATCH= None
 """Min percentage number of both class in a batch. If set to None does not use a sampler in the DataLoader"""
 
 BATCH_SIZE= 96
@@ -88,20 +91,26 @@ RANDOM_STATE= 13
 RANDOM_SEED= 0
 """Seed to controls the weights initializations. If None, don't use any seed"""
 
+DATASET_REDUCTION= 9
+"""Ratio of negative samples to maintain after the reduction. If not set, no reduction will be applied"""
+
+DATASET_REDUCTION_SEED= 0
+"""Seed for reduction sampling reproducibility"""
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # LOSSES INFO
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
-LEARNING_RATE= 1e-6
+LEARNING_RATE= 1e-5
 """Learning rate of the model"""
 
 USE_WEIGHT= True
 """If True, will be use weighted loss if available"""
 
-FOCAL_LOSS_APLHA= 0.75
+FOCAL_LOSS_APLHA= 0.25
 """Weighting factor in range [0, 1] to balance positive vs negative examples. High weight for positive class. If None are set based on the representativeness of the classes"""
 
-FOCAL_LOSS_GAMMA= 1.0
+FOCAL_LOSS_GAMMA= 2.0
 """Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples. Higher is more focus on hard examples"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #

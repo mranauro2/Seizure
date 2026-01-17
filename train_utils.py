@@ -14,6 +14,7 @@ from utils.constant.constants_eeg import *
 from datetime import datetime, timedelta
 from tqdm.auto import tqdm
 from logging import Logger
+from copy import deepcopy
 from typing import Any
 import os
 import re
@@ -146,7 +147,8 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
         type_GGNN               = GGNN_TYPE,
         num_steps               = NUM_STEPS,
         num_GGNN_layers         = NUM_GGNN_LAYERS,
-        act_GGNN                = ACT_GGNN,
+        act_mid_GGNN            = ACT_MID_GGNN,
+        act_last_GGNN           = ACT_LAST_GGNN,
         
         transformer_type        = TRANSFORMER_TYPE,
         num_transf_heads        = TRANSFORMER_NUM_HEADS,
@@ -171,7 +173,7 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
     
     return model
 
-def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], method:SeizureDatasetMethod, lambda_value:float|None, scaler:ScalerType|None, preprocess_dir:str|None):
+def generate_datasets(logger:Logger, input_dir:str, files_record:list[str], method:SeizureDatasetMethod, lambda_value:float|None, scaler:ScalerType|None, preprocess_dir:str|None):
     """
     Generate the dataset
     
@@ -185,7 +187,7 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
         preprocess_dir (str|None):      Directory to the preprocess data
         
     Returns:
-        dataset:
+        datasets (tuple(BaseSeizureDataset, BaseSeizureDataset)):   Original dataset and dataset reduced
     """
     string_additional_info= additional_info(
         dataset_data=[
@@ -224,8 +226,11 @@ def generate_dataset(logger:Logger, input_dir:str, files_record:list[str], metho
             top_k           = TOP_K,
             lambda_value    = lambda_value
         )
+        
+    dataset_reduced = deepcopy(dataset)
+    dataset_reduced.reduce_data(DATASET_REDUCTION, seed=DATASET_REDUCTION_SEED)
     
-    return dataset
+    return dataset, dataset_reduced
 
 def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:bool, loss_type:Loss, device:str) -> tuple[Loss, int, int]:
     """
@@ -430,6 +435,7 @@ def additional_info(dataset_data:list[tuple[str,Any]]) -> str:
         ("USE_FFT", USE_FFT),
         ("USE_FFT_ADJ", USE_FFT_ADJ),
         ("TOP_K", TOP_K),
+        ("DATASET_REDUCTION", DATASET_REDUCTION),
         *dataset_data
     ]
     dataset_str = "Dataset info:\n{}".format(dict_to_str(dataset_tuple))
@@ -465,7 +471,8 @@ def additional_info(dataset_data:list[tuple[str,Any]]) -> str:
         ("GGNN_TYPE", GGNN_TYPE),
         ("NUM_STEPS", NUM_STEPS),
         ("NUM_GGNN_LAYERS", NUM_GGNN_LAYERS),
-        ("ACT_GGNN", ACT_GGNN),
+        ("ACT_MID_GGNN", ACT_MID_GGNN),
+        ("ACT_LAST_GGNN", ACT_LAST_GGNN),
         ("NUM_GGNN_HEADS", NUM_GGNN_HEADS),
         ("USE_GGNN_GATv2", USE_GGNN_GATv2)
     ])

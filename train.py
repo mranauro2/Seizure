@@ -278,7 +278,7 @@ def train(
         folder_number (str):                Parameter used when :const:`K_FOLD` is not None to found the correct folder
     
     Returns:
-        interrupt (bool):                   If the execution is interrupted by checkpoint or stop file
+        interrupt (bool):                   Returns True if the execution is interrupted by stop file. If the interruption is from the checkpoint returns False
     """
     # check variable
     possibilities = [True, False, "first"]
@@ -304,7 +304,7 @@ def train(
         array_test=  np.empty((START_EPOCH+num_epochs, num_metrics), dtype=np.float64)
     
     # change MODEL_PARTIAL_PATH if needed
-    if K_FOLD:
+    if K_FOLD_VAL:
         global MODEL_PARTIAL_PATH
         MODEL_PARTIAL_PATH= os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_{folder_number}", MODEL_NAME)
     
@@ -312,7 +312,7 @@ def train(
     if START_EPOCH != 0:
         if (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
             epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
-        if K_FOLD:
+        if K_FOLD_VAL:
             epoch_folder = os.path.join(METRICS_SAVE_FOLDER, f"{os.path.basename(METRICS_SAVE_FOLDER)}_{folder_number}", f"{EPOCH_FOLDER_NAME}_{START_EPOCH}")
             
         for index,name in enumerate(metrics_name):
@@ -337,11 +337,14 @@ def train(
             "\n"+
             "\tearly stop       : {}".format(EARLY_STOP_PATIENCE) +
             "\n"+
-            "\tearly stop start : {}".format(START_USE_EARLY_STOP)
+            "\twarm-up epochs   : {}".format(START_USE_EARLY_STOP)
         )
     
     for index in range(START_EPOCH):
         checkpoint_observer.update_saving(array_val[index, 0])
+    if checkpoint_observer.check_early_stop():
+        LOGGER.warning(f"Reached early stop at epoch {START_EPOCH+1}, execution not started")
+        return False
     
     # real training
     interrupt = False
@@ -365,7 +368,7 @@ def train(
         for index,name in enumerate(metrics_name):
             if (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
                 intermediate = ""
-            if K_FOLD:
+            if K_FOLD_VAL:
                 intermediate = f"{os.path.basename(METRICS_SAVE_FOLDER)}_{folder_number}"
             
             position= os.path.join(METRICS_SAVE_FOLDER, intermediate, f"{EPOCH_FOLDER_NAME}_{epoch_num+START_EPOCH+1}", f"{name}_{epoch_num+START_EPOCH+1}.{METRICS_EXTENTION}")
@@ -386,13 +389,13 @@ def train(
             
             # save also an image of the dataset t-SNE projection
             tsne_projected = TSNEProjector().project(REDUCER.get_features(), NUM_WORKERS)
-            intermediate = f"{folder_number}" if K_FOLD else ""
+            intermediate = f"{folder_number}" if K_FOLD_VAL else ""
             tsne_path = os.path.join(TSNE_SAVE_FOLDER, intermediate, f"{TSNE_NAME}_{epoch_num+START_EPOCH+1}")
             EmbeddingVisualizer.plot(tsne_projected, REDUCER.get_labels(), title="T-SNE", show=False, background=BackgroundColorsMethod.GRID, save_path=tsne_path, dpi=250)
             
             # save also when the model is wrong
             if (SEIZURE_ANALYZER is not None):
-                intermediate = f"{folder_number}" if K_FOLD else ""
+                intermediate = f"{folder_number}" if K_FOLD_VAL else ""
                 analyzer_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_NAME}_{epoch_num+START_EPOCH+1}")
                 analyzer_hist_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_HISTOGRAM_NAME}_{epoch_num+START_EPOCH+1}")
                 analyzer_ROC_path = os.path.join(ANALYZER_SAVE_FOLDER, intermediate, f"{ANALYZER_ROC_NAME}_{epoch_num+START_EPOCH+1}")
@@ -407,16 +410,14 @@ def train(
         
         # check the early stop
         if checkpoint_observer.check_early_stop():
-            LOGGER.warning(f"Reached early stop at epoch {epoch_num+1}")
-            interrupt = True
+            LOGGER.warning(f"Reached early stop at epoch {epoch_num+START_EPOCH+1}")
+            break
         
         # check stop file
         if check_stop_file(STOP_FILE):
-            LOGGER.warning("Stop file '{}' found. Stopped at epoch {}".format(os.path.basename(STOP_FILE), epoch_num+1))
+            LOGGER.warning("Stop file '{}' found. Stopped at epoch {}".format(os.path.basename(STOP_FILE), epoch_num+START_EPOCH+1))
             delete_stop_file(STOP_FILE)
             interrupt = True
-        
-        if interrupt and (K_FOLD is None):
             break
     
     return interrupt
@@ -430,7 +431,8 @@ def main_k_fold_patient_specific():
     loss_type, input_dir, files_record, method, lambda_value, scaler_type, single_scaler, save_num, do_train, load_pretrain, num_epochs, verbose, preprocess_dir = parse_arguments()
     if (load_pretrain):
         raise NotImplementedError("load_pretrain using k-fold validation is not implemented")
-    dataset:SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
+    dataset:SeizureDatasetDetection= None
+    dataset, _= generate_datasets(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
     
     if (PATIENT_SPECIFIC) not in dataset.targets_dict().keys():
         raise ValueError("Patient {} not exists in the dataset. The available patients are '{}'".format(PATIENT_SPECIFIC, "', '".join(dataset.targets_dict().keys())))
@@ -439,7 +441,7 @@ def main_k_fold_patient_specific():
     k_fold = patient_specific_k_fold(
         indices     = dataset.targets_index_map()[PATIENT_SPECIFIC],
         y_bool      = data_dict[PATIENT_SPECIFIC],
-        k           = K_FOLD,
+        k           = K_FOLD_VAL,
         train_ratio = PERCENTAGE_TRAINING_SPLIT
     )
     
@@ -526,7 +528,7 @@ def main_k_fold_patient_specific():
                                     folder_number=str(fold_index+1).zfill(2)
                                 )
                 print_info = False
-                epoch_interrupted = (epoch_interrupted and interrupt)
+                epoch_interrupted = (epoch_interrupted or interrupt)
             else:
                 raise NotImplementedError("Evaluation method with k-fold is not implemented yet")
             
@@ -542,18 +544,25 @@ def main_k_fold():
     loss_type, input_dir, files_record, method, lambda_value, scaler_type, single_scaler, save_num, do_train, load_pretrain, num_epochs, verbose, preprocess_dir = parse_arguments()
     if (load_pretrain):
         raise NotImplementedError("load_pretrain using k-fold validation is not implemented")
-    dataset:SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
+    dataset:SeizureDatasetDetection= None
+    dataset_reduced:SeizureDatasetDetection= None
+    dataset, dataset_reduced = generate_datasets(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
     
     # removing unwanted patients
-    remaining_data = dataset.targets_dict()
+    remaining_data = dataset_reduced.targets_dict()
     if (EXCEPT_DATA is not None):
-        remaining_data, _ = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)
+        remaining_data, _ = split_patient_data_specific(dataset_reduced.targets_dict(), EXCEPT_DATA)
     
     # splitting data
-    k_fold = k_fold_split_patient_data(remaining_data, val_remaining_patients=K_FOLD)
+    k_fold = k_fold_split_patient_data(remaining_data, val_remaining_patients=(K_FOLD_VAL+K_FOLD_TEST))
+    if (K_FOLD_TEST is not None) and (K_FOLD_TEST > 0):
+        k_fold = split_nested_dicts(k_fold, K_FOLD_TEST)
+        for _,_,test_dict in k_fold:
+            for key in test_dict.keys():
+                test_dict.update({key: dataset.targets_dict()[key]})
     
     # print on screen some informations    
-    names= ["train", "validation"]
+    names= ["train", "validation"] if (len(k_fold[0])==2) else ["train", "validation", "test"]
     ljust_value= (max([len(name) for name in names]))
     
     for index,item in enumerate(k_fold):
@@ -561,9 +570,9 @@ def main_k_fold():
         string+= "Fold number {}".format(index+1)
         for name,dictionary in zip(names,item):
             if (name=="train"):
-                dictionary = augment_dataset_train(LOGGER, dataset, dictionary)
+                dictionary = augment_dataset_train(LOGGER, dataset_reduced, dictionary)
                 samples_pos, samples_neg = pos_neg_samples(dictionary)
-                dictionary = augment_dataset_train(None, dataset, dictionary, remove=True)
+                dictionary = augment_dataset_train(None, dataset_reduced, dictionary, remove=True)
             else:
                 samples_pos, samples_neg = pos_neg_samples(dictionary)
             string+= "\n\tUsing patient(s) for {} : '{}'".format(name.ljust(ljust_value), ", ".join(dictionary.keys()))
@@ -599,26 +608,30 @@ def main_k_fold():
     for index in TqdmMinutesAndHours(range(1, total_training+1), desc="Iteration"):
         current_epochs = MAX_NUM_EPOCHS if (index*MAX_NUM_EPOCHS <= num_epochs) else (num_epochs % MAX_NUM_EPOCHS)
         
-        for train_dict,val_dict in TqdmMinutesAndHours(k_fold, desc="K-Fold", leave=False):
-            train_dict = augment_dataset_train(None, dataset, train_dict)
-            train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
-            val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
+        for dictionaries in TqdmMinutesAndHours(k_fold, desc="K-Fold", leave=False):
+            train_dict , val_dict, test_dict = (*dictionaries, None) if (len(dictionaries)==2) else dictionaries
+            train_dict = augment_dataset_train(None, dataset_reduced, train_dict)
+            train_set= subsets_from_patient_splits(dataset_reduced, dataset_reduced.targets_index_map(), train_dict)
+            val_set=   subsets_from_patient_splits(dataset_reduced, dataset_reduced.targets_index_map(), val_dict)
+            test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict) if (test_dict is not None) else None
             
             # generating new scaler
             scaler = scaler_load_and_save(None, scaler_type, single_scaler, train_dict, train_set, device='cpu')
             if (scaler is not None):
+                dataset_reduced.scaler= scaler
                 dataset.scaler= scaler
             
             # generate dataloaders
             train_sampler = None
             if (MIN_SAMPLER_PER_BATCH != 0):
-                train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+                train_sampler= SeizureSampler(dataset_reduced.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
 
-            train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
-            val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
+            train_loader= DataLoader(dataset_reduced, sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
+            val_loader=   DataLoader(val_set,         sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False)
+            test_loader=  DataLoader(test_set,        sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=False, persistent_workers=False) if (test_set is not None) else None
             
             # load model if exists or create a new model            
-            model= generate_model(dataset, DEVICE)
+            model= generate_model(dataset_reduced, DEVICE)
             
             folder_number = scaler_file_patient_ids(val_dict, separator="_")
             filename, num_epoch = get_model(os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_{folder_number}"), specific_num=save_num)
@@ -635,19 +648,19 @@ def main_k_fold():
             if do_train:
                 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)                
                 interrupt = train(
-                                    train_loader, val_loader, None,
+                                    train_loader, val_loader, test_loader,
                                     model=model, prediction_loss=loss, optimizer=optimizer, num_epochs=current_epochs,
                                     verbose=False, evaluation_verbose=False,
                                     show_progress=True, show_inner_progress="first" if print_info else False,
                                     folder_number=folder_number
                                 )
                 print_info = False
-                epoch_interrupted = (epoch_interrupted and interrupt)
+                epoch_interrupted = (epoch_interrupted or interrupt)
             else:
                 raise NotImplementedError("Evaluation method with k-fold is not implemented yet")
             
             # remove the augmentation before pass to the next fold
-            _ = augment_dataset_train(None, dataset, train_dict, remove=True)
+            _ = augment_dataset_train(None, dataset_reduced, train_dict, remove=True)
             
         if epoch_interrupted:
             LOGGER.warning(f"Interruption detected after completing epoch for all folds")
@@ -661,20 +674,24 @@ def main_test_set():
     loss_type, input_dir, files_record, method, lambda_value, scaler, single_scaler, save_num, do_train, load_pretrain, num_epochs, verbose, preprocess_dir = parse_arguments()
     if (load_pretrain) and (PRETRAIN):
         raise ValueError("The model is set on self-supervised learning but it want to load pre-trained weights to do fine-tuning! Both 'PRETRAIN' constant and '--load_pretrain' parameter are set to True")
-    dataset:SeizureDatasetPrediction|SeizureDatasetDetection = generate_dataset(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
+    dataset:SeizureDatasetDetection= None
+    dataset_reduced:SeizureDatasetDetection= None
+    dataset, dataset_reduced = generate_datasets(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
     
     # splitting data, augment train set and removing unwanted patients
-    remaining_data = split_patient_data_specific(dataset.targets_dict(), EXCEPT_DATA)[0] if (EXCEPT_DATA is not None) else dataset.targets_dict()
+    remaining_data = split_patient_data_specific(dataset_reduced.targets_dict(), EXCEPT_DATA)[0] if (EXCEPT_DATA is not None) else dataset.targets_dict()
     
     test_dict = None
     if (TEST_PATIENT_IDS is not None):
         remaining_data, test_dict = split_patient_data_specific(remaining_data, TEST_PATIENT_IDS)
+        for key in test_dict.keys():
+            test_dict.update({key: dataset.targets_dict()[key]})
     train_dict, val_dict = split_patient_data(remaining_data, split_ratio=PERCENTAGE_TRAINING_SPLIT) if (VAL_PATIENT_IDS is None) else split_patient_data_specific(remaining_data, VAL_PATIENT_IDS)
     
-    train_dict = augment_dataset_train(LOGGER, dataset, train_dict)
+    train_dict = augment_dataset_train(LOGGER, dataset_reduced, train_dict)
     
-    train_set= subsets_from_patient_splits(dataset, dataset.targets_index_map(), train_dict)
-    val_set=   subsets_from_patient_splits(dataset, dataset.targets_index_map(), val_dict)
+    train_set= subsets_from_patient_splits(dataset_reduced, dataset_reduced.targets_index_map(), train_dict)
+    val_set=   subsets_from_patient_splits(dataset_reduced, dataset_reduced.targets_index_map(), val_dict)
     test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict) if (test_dict is not None) else None
     
     # global variables
@@ -682,17 +699,18 @@ def main_test_set():
     
     # generating new scaler
     scaler = scaler_load_and_save(LOGGER, scaler, single_scaler, train_dict, train_set, device='cpu')
+    dataset_reduced.scaler = scaler
     dataset.scaler= scaler
     
     # generate dataloaders and sampler
     train_sampler = None
     if (MIN_SAMPLER_PER_BATCH != 0) and not(PRETRAIN):
-        train_sampler= SeizureSampler(dataset.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
+        train_sampler= SeizureSampler(dataset_reduced.targets_list(), train_set.indices, batch_size=BATCH_SIZE, n_per_class=MIN_SAMPLER_PER_BATCH, seed=RANDOM_STATE)
         LOGGER.info("Loading dataset with at least ({}) samples for class in a batch of ({}) [min positive ratio {:.3f}%]...".format(MIN_SAMPLER_PER_BATCH, BATCH_SIZE, 100 * MIN_SAMPLER_PER_BATCH / BATCH_SIZE))
 
-    train_loader= DataLoader(dataset,  sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True)
-    val_loader=   DataLoader(val_set,  sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True)
-    test_loader=  DataLoader(test_set, sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True) if (test_set is not None) else None
+    train_loader= DataLoader(dataset_reduced, sampler=train_sampler, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader=   DataLoader(val_set,         sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True)
+    test_loader=  DataLoader(test_set,        sampler=None,          batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, pin_memory=True) if (test_set is not None) else None
     
     # print on screen some informations
     names= ["test", "train", "validation"]
@@ -715,7 +733,7 @@ def main_test_set():
     DEVICE= 'cuda' if (torch.cuda.is_available() and USE_CUDA) else 'cpu'
     LOGGER.info(f"Using {DEVICE} device...")
     LOGGER.info("Loading model...")
-    model= generate_model(dataset, DEVICE)
+    model= generate_model(dataset_reduced, DEVICE)
     
     model_save_folder = f"{MODEL_SAVE_FOLDER}{PRETRAIN_SUFFIX}" if (load_pretrain) else MODEL_SAVE_FOLDER
     filename, num_epoch = get_model(model_save_folder, specific_num=save_num)
@@ -740,7 +758,7 @@ def main_test_set():
             )
         LOGGER.info(f'Stop training  : {datetime.now().strftime("%d/%m/%Y at %H:%M:%S")}\n')
     else:
-        eval(test_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
+        eval(test_loader if (test_loader is not None) else val_loader, model, prediction_loss=loss, verbose=True, show_progress=True)
 
 if __name__=='__main__':
     train_or_eval = train_or_eval_prediction if PRETRAIN else train_or_eval_detection
@@ -748,17 +766,19 @@ if __name__=='__main__':
     # errors
     if (PRETRAIN) and (PATIENT_SPECIFIC):
         raise ValueError("Cannot be use self-supervised mode using 'PATIENT_SPECIFIC")
-    if (PATIENT_SPECIFIC) and not(K_FOLD):
+    if (PATIENT_SPECIFIC) and not(K_FOLD_VAL):
         raise ValueError("'PATIENT_SPECIFIC' is set but 'K_FOLD' is not")
-    if (K_FOLD) and (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
+    if (K_FOLD_VAL) and (TEST_PATIENT_IDS or VAL_PATIENT_IDS):
         raise ValueError("The variables 'K_FOLD' is not None. Cannot be not None also 'TEST_PATIENT_IDS' and 'VAL_PATIENT_IDS'. Only one pack can be not None")
-    
+    if (K_FOLD_VAL) and (K_FOLD_TEST) and (K_FOLD_TEST<0):
+        raise ValueError("K_FOLD_TEST must be non-negative")
+        
     # execution
     if PATIENT_SPECIFIC:
         LOGGER.info("Execution with k-fold cross validation with only one patient\n")
         main_k_fold_patient_specific()
         
-    elif K_FOLD:
+    elif K_FOLD_VAL:
         LOGGER.info("Execution with k-fold cross validation\n")
         main_k_fold()
         
