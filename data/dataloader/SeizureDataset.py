@@ -16,6 +16,7 @@ from data.scaler.Scaler import Scaler
 import data.utils as utils
 import numpy as np
 import warnings
+import random
 import os
 
 class SeizureDatasetMethod(Enum):
@@ -106,8 +107,9 @@ class BaseSeizureDataset(Dataset, ABC):
         self.file_info = []
         for file in files_record or []:
             self.file_info.extend([item for item in self._parse_record_file(file) if item not in self.file_info])
-
+        
         self._targets = self._generate_targets_dict(self.file_info)
+        self.file_info_original = deepcopy(self.file_info)
 
     @property
     def scaler(self):
@@ -143,6 +145,60 @@ class BaseSeizureDataset(Dataset, ABC):
     def _compute_laplacian(self, x:np.ndarray):
         adj = self._compute_cross(x)
         return utils.normalize_laplacian_spectrum(adj, self.lambda_value)
+    
+    def reduce_data(self, proportion:int, seed:int=None, exceptions:list[str]=None):
+        """
+        Reduce the number of negative sample to ensure a more balanced dataset.
+        
+        Args:
+            proportion (int):       Ratio of negative samples to maintain (1:proportion). if not set do not apply any operation
+            seed (int):             Seed for reproducible random sampling. If None, don't use any seed
+            exceptions (list[str]): List of patient_ids to exclude from reduction
+        """
+        if (proportion is None):
+            return
+        
+        if (proportion <= 0):
+            raise ValueError("'proportion' must be positive")
+        random_generator = random.Random(seed)
+        
+        # Group samples by patient
+        samples_by_patient = defaultdict(list)
+        for sample in self.file_info:
+            samples_by_patient[sample.patient_id].append(sample)
+        
+        reduced_samples = []
+        patient_samples:list[SampleSeizureData|NextTimeData] = None
+        for patient_id, patient_samples in samples_by_patient.items():
+            # If patient is excluded, keep everything
+            if (exceptions is not None) and (patient_id in exceptions):
+                reduced_samples.extend(patient_samples)
+                continue
+
+            positives = [s for s in patient_samples if s.has_seizure]
+            negatives = [s for s in patient_samples if not(s.has_seizure)]
+
+            # Always keep all positives
+            reduced_samples.extend(positives)
+
+            # Exact ratio: negatives = positives * proportion
+            max_negatives = len(positives) * proportion
+
+            if max_negatives <= 0:
+                continue
+            
+            if len(negatives) <= max_negatives:
+                reduced_samples.extend(negatives)
+            else:
+                reduced_samples.extend( random_generator.sample(negatives, max_negatives) )
+
+        self.file_info = reduced_samples
+        self._targets = self._generate_targets_dict(self.file_info)
+    
+    def restore_reduced(self):
+        """Remove the operation applied by `reduce_data`"""
+        self.file_info = deepcopy(self.file_info_original)
+        self._targets = self._generate_targets_dict(self.file_info)
     
     @abstractmethod
     def _parse_record_file(self, file:str) -> list:
