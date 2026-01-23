@@ -259,7 +259,6 @@ class GGNNLayer(nn.Module):
             :param supports (Tensor):   Adjacency matrix with size (batch_size, num_nodes, num_nodes)
             :returns Tensor:            New representation of the feature/node matrix with size (batch_size, num_nodes*output_dim)
         """
-        propagator:nn.GRUCell= None
         for _ in range(self.num_steps):
             for propagator in self.propagators:
                 x = propagator(x, supports)

@@ -163,7 +163,7 @@ class SGLC_Cell(nn.Module):
         
         # if not use_GRU
         else:
-            inputs = torch.sigmoid(self.ggnn(inputs, supports))
+            inputs = self.ggnn(inputs, supports)
             return inputs, supports
 
     def hidden_state_empty(self, batch_size:int) -> Tensor:

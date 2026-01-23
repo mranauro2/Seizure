@@ -221,7 +221,7 @@ ACT_MID_GGNN= None
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Non-linear activation function to use between the two fully-connected layers in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
-ACT_LAST_GGNN= None
+ACT_LAST_GGNN= 'sigmoid'
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Non-linear activation function to use after the second fully-connected layers in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
