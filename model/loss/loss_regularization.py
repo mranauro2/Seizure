@@ -70,7 +70,7 @@ def degree_regularization_loss_func(adj_matrix:Tensor):
     all_ones_col= torch.ones((batch_size, num_nodes, 1), device=device)
     all_ones_row= torch.ones((batch_size, 1, num_nodes), device=device)
     
-    first_product= torch.log( torch.matmul(adj_matrix, all_ones_col) + 1e-10 )
+    first_product= torch.log( torch.clamp_min( torch.matmul(adj_matrix, all_ones_col), 1e-10) )
     second_product= torch.matmul( all_ones_row, first_product )
     
     return damping_factor * second_product.squeeze(-1).squeeze(-1)
@@ -92,5 +92,5 @@ def sparsity_loss_func(adj_matrix:Tensor):
     """
     num_nodes= adj_matrix.shape[-1]
     damping_factor= 1/(num_nodes**2)
-    
-    return damping_factor * torch.norm(adj_matrix, p='fro', dim=(-2, -1))
+    result = damping_factor * torch.norm(adj_matrix, p='fro', dim=(-2, -1))
+    return torch.Tensor([1e17]) if (result.item() == float('inf')) else result
