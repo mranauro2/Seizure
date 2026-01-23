@@ -93,6 +93,237 @@ class SeizureInferenceAnalyzer:
 
     def plot_error_histograms(self, tau:float, patient_ids:list[str]=None, max_abs_time:float=None, bins:int=30, show:bool=True, save_path:str=None):
         """
+        Plot error histograms organized by model predictions.
+
+        This function analyzes:
+        - Predicted class 0 (non-seizure): correct predictions and false negatives
+        - Predicted class 1 (seizure): correct predictions and false positives
+        - Temporal distribution of errors relative to seizure events
+
+        Args:
+            tau (float):            Decision threshold applied to seizure probability
+            patient_ids (list):     If provided, only samples from these patients are considered
+            max_abs_time (float):   If provided, only samples with |time_to_seizure| <= max_abs_time are considered
+            bins (int):             Number of bins for histograms
+            show (bool):            Show the figure
+            save_path (str):        If provided, save the figure at the specified path
+        """
+        # Build DataFrame from internal storage
+        df = pd.DataFrame({
+            "logit_0": self._logit_0,
+            "logit_1": self._logit_1,
+            "label": self._label,
+            "time": self._time_to_seizure,
+            "patient_id": self._patient_id,
+        })
+
+        # Optional filtering
+        if (patient_ids is not None):
+            df = df[df["patient_id"].isin(patient_ids)]
+
+        if (max_abs_time is not None):
+            df = df[df["time"].abs() <= max_abs_time]
+
+        # Convert logits → probabilities
+        logits = df[["logit_0", "logit_1"]].values
+        probs = torch.softmax(torch.tensor(logits), dim=1).numpy()
+
+        df["prob_seizure"] = probs[:, 1]
+        df["confidence"] = probs.max(axis=1)
+
+        # Apply threshold to get predictions
+        df["predicted"] = (df["prob_seizure"] >= tau).astype(int)
+
+        # ========== PREDICTED CLASS 0 ANALYSIS (model says non-seizure) ==========
+        n_negative = len(df[df["label"] == 0])
+        pred_neg_df = df[df["predicted"] == 0]
+        n_pred_negative = len(pred_neg_df)
+        n_true_negative = (pred_neg_df["label"] == 0).sum()
+        n_false_negative = (pred_neg_df["label"] == 1).sum()
+        
+        # ========== PREDICTED CLASS 1 ANALYSIS (model says seizure) ==========
+        n_positive = len(df[df["label"] == 1])
+        pred_pos_df = df[df["predicted"] == 1]
+        n_pred_positive = len(pred_pos_df)
+        n_true_positive = (pred_pos_df["label"] == 1).sum()
+        n_false_positive = (pred_pos_df["label"] == 0).sum()
+
+        # Print statistics in organized format
+        prediction_perc = n_pred_negative / n_negative
+        statistics_pred_0  = (
+            "Total samples:\n"
+            "   {}\n"
+            "Total predictions:\n"
+            "   {} ({}%)\n"
+            "Correct (TN):\n"
+            "   {} ({:5.2f}%)\n"
+            "Wrong (FN):\n"
+            "   {} ({:5.2f}%)"
+        ).format(
+            n_negative,
+            n_pred_negative,
+            f"{100*prediction_perc:6.2f}" if (prediction_perc<=1) else f"+{100*(prediction_perc-1):5.2f}",
+            n_true_negative, (100 * n_true_negative / n_pred_negative) if n_pred_negative > 0 else 0,
+            n_false_negative, (100 * n_false_negative / n_pred_negative) if n_pred_negative > 0 else 0
+        )
+        
+        prediction_perc = n_pred_positive / n_positive
+        statistics_pred_1  = (
+            "Total samples:\n"
+            "   {}\n"
+            "Total predictions:\n"
+            "   {} ({}%)\n"
+            "Correct (TP):\n"
+            "   {} ({:5.2f}%)\n"
+            "Wrong (FP):\n"
+            "   {} ({:5.2f}%)\n"
+        ).format(
+            n_positive,
+            n_pred_positive,
+            f"{100*prediction_perc:6.2f}" if (prediction_perc<=1) else f"+{100*(prediction_perc-1):5.2f}",
+            n_true_positive, (100 * n_true_positive / n_pred_positive) if n_pred_positive > 0 else 0,
+            n_false_positive, (100 * n_false_positive / n_pred_positive) if n_pred_positive > 0 else 0
+        )
+
+        # ========== PLOTTING ==========
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+        # ---------- ROW 1: PREDICTED CLASS 0 (Model says non-seizure) ----------
+        
+        # Subplot 1: Time-to-seizure for false negatives (missed seizures)
+        fn_df = pred_neg_df[pred_neg_df["label"] == 1]
+        pre_ictal_fn = fn_df[fn_df["time"] > 0]["time"]
+        post_ictal_fn = fn_df[fn_df["time"] < 0]["time"]
+        ictal_fn = fn_df[fn_df["time"] == 0]["time"]
+
+        ax:Axes = axes[0, 0]
+        ax.hist(
+            pre_ictal_fn,
+            bins=bins,
+            alpha=0.7,
+            label="FN: Seizure end ahead",
+        )
+        ax.hist(
+            post_ictal_fn,
+            bins=bins,
+            alpha=0.7,
+            label="FN: Seizure start behind",
+        )
+        ax.hist(
+            ictal_fn,
+            bins=bins,
+            alpha=0.7,
+            label="FN: At seizure boundary",
+        )
+        ax.axvline(0, color="black", linestyle="--", linewidth=1)
+        ax.set_title("Predicted Non-Seizure: When Model Missed Seizures (FN)")
+        ax.set_xlabel("Time to nearest seizure boundary (seconds)")
+        ax.set_ylabel("Number of samples")
+        ax.legend()
+
+        # Subplot 2: Confidence distribution for predicted class 0
+        ax:Axes = axes[0, 1]
+        ax.hist(
+            pred_neg_df[pred_neg_df["label"] == 0]["confidence"],
+            bins=bins,
+            alpha=0.7,
+            label="Correct (TN)",
+        )
+        ax.hist(
+            pred_neg_df[pred_neg_df["label"] == 1]["confidence"],
+            bins=bins,
+            alpha=0.7,
+            label="Wrong (FN)",
+        )
+        ax.text(
+            x = 1.05,
+            y = 0.5,
+            s = statistics_pred_0,
+            transform = ax.transAxes,
+            verticalalignment ='center',
+            horizontalalignment ='left',
+            fontsize = 11
+        )
+        ax.set_title("Predicted Non-Seizure: Confidence Distribution")
+        ax.set_xlabel("Model confidence")
+        ax.set_ylabel("Number of samples")
+        ax.legend()
+
+        # ---------- ROW 2: PREDICTED CLASS 1 (Model says seizure) ----------
+        
+        # Subplot 3: Time-to-seizure for false positives (false alarms)
+        fp_df = pred_pos_df[pred_pos_df["label"] == 0]
+        pre_ictal_fp = fp_df[fp_df["time"] > 0]["time"]
+        post_ictal_fp = fp_df[fp_df["time"] < 0]["time"]
+
+        ax:Axes = axes[1, 0]
+        ax.hist(
+            pre_ictal_fp,
+            bins=bins,
+            alpha=0.6,
+            label="FP: Seizure ahead",
+        )
+        ax.hist(
+            post_ictal_fp,
+            bins=bins,
+            alpha=0.6,
+            label="FP: Seizure behind",
+        )
+        ax.axvline(0, color="black", linestyle="--", linewidth=1)
+        ax.set_title("Predicted Seizure: When Model False Alarmed (FP)")
+        ax.set_xlabel("Time to nearest seizure boundary (seconds)")
+        ax.set_ylabel("Number of samples")
+        ax.legend(loc="best")
+
+        # Subplot 4: Confidence distribution for predicted class 1
+        ax:Axes = axes[1, 1]
+        ax.hist(
+            pred_pos_df[pred_pos_df["label"] == 1]["confidence"],
+            bins=bins,
+            alpha=0.7,
+            label="Correct (TP)",
+        )
+        ax.hist(
+            pred_pos_df[pred_pos_df["label"] == 0]["confidence"],
+            bins=bins,
+            alpha=0.7,
+            label="Wrong (FP)",
+        )
+        ax.text(
+            x = 1.05,
+            y = 0.5,
+            s = statistics_pred_1,
+            transform = ax.transAxes,
+            verticalalignment ='center',
+            horizontalalignment ='left',
+            fontsize = 11
+        )
+        ax.set_title("Predicted Seizure: Confidence Distribution")
+        ax.set_xlabel("Model confidence")
+        ax.set_ylabel("Number of samples")
+        ax.legend(loc="best")
+
+        # Overall title and layout
+        plt.suptitle(f"Classification Error Analysis by Prediction (τ = {tau})", fontsize=14, y=0.995)
+        
+        # Save and/or show
+        if (save_path is not None):
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            if not(save_path.endswith(".png")):
+                save_path = save_path + ".png"
+            try:
+                fig.savefig(save_path, dpi=200, format="png", bbox_inches="tight")
+            except ValueError as e:
+                msg = f"The following ValueError is raised, the image <{save_path}.png> cannot be saved: {str(e)}"
+                warnings.warn(msg)
+        
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+
+    def plot_error_histograms_not_used(self, tau:float, patient_ids:list[str]=None, max_abs_time:float=None, bins:int=30, show:bool=True, save_path:str=None):
+        """
         Plot error histograms for both classes and report detailed statistics.
 
         This function analyzes:
