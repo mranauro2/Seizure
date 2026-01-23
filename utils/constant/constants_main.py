@@ -101,6 +101,9 @@ DATASET_REDUCTION_SEED= 0
 # LOSSES INFO
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+TAU= 0.5
+"""Threshold for binary classification"""
+
 LEARNING_RATE= 1e-5
 """Learning rate of the model"""
 

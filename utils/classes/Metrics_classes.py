@@ -27,12 +27,14 @@ class Loss_Meter:
 
 class Accuracy_Meter:
     """Keep track of weighted accuracy values and target class probabilities over time."""
-    def __init__(self, class_weight:list[int]=None, num_classes:int=2):
+    def __init__(self, class_weight:list[int]=None, num_classes:int=2, tau:float=0.5):
         """
         Initialize the meter with class weights.
             :param class_samples (list[int]):   A list of weight per class
             :param num_classes (int):           Number of classes
+            :param tau (float):                 Threshold for binary classification
         """
+        self.tau = tau
         self.num_classes = num_classes
         self.class_weight = torch.tensor(class_weight, dtype=torch.float) if (class_weight is not None) else None
         
@@ -53,7 +55,7 @@ class Accuracy_Meter:
         output = output.cpu()
         target = target.cpu()
         
-        preds = output.argmax(dim=1)
+        preds = (torch.softmax(output, dim=1)[:, 1] >= self.tau).long() if (self.num_classes==2) else output.argmax(dim=1)
         correct_mask = (preds == target).float()
 
         # Assign each sample a weight based on its true class
@@ -119,10 +121,28 @@ class Accuracy_Meter:
         
         return avg_probs
     
+    def get_balanced_accuracy(self) -> tuple[str, float]:
+        """Return ('balanced_accuracy', value)."""
+        total = 0
+        count = 0
+        for _,value in self.get_class_accuracy():
+            total += value
+            count += 1
+        
+        if total == 0:
+            return "balanced_accuracy", 0.0
+        return "balanced_accuracy", total / count
+
 class ConfusionMatrix_Meter():
     """Keep track of confusion matrix over time"""
-    def __init__(self, num_classes:int):
-        """Keep track of confusion matrix over time"""
+    def __init__(self, num_classes:int, tau:float=0.5):
+        """
+        Keep track of confusion matrix over time
+            :param num_classes (int):           Number of classes
+            :param tau (float):                 Threshold for binary classification
+        """
+        self.tau = tau
+        self.num_classes = num_classes
         self.labels= range(num_classes)
         self.tp = 0.0  # True Positives
         self.tn = 0.0  # True Negatives
@@ -135,7 +155,7 @@ class ConfusionMatrix_Meter():
             :param output (Tensor): Output of the model with size (batch_size, num_classes)
             :param target (Tensor): Target value for the output with size (batch_size)
         """
-        preds = output.argmax(dim=1)
+        preds = (torch.softmax(output, dim=1)[:, 1] >= self.tau).long() if (self.num_classes==2) else output.argmax(dim=1)
         
         cm = confusion_matrix(target.cpu(), preds.cpu(), labels=self.labels)
         

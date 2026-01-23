@@ -366,23 +366,24 @@ def get_model(dir:str, specific_num:int=None) -> tuple[str, int]:
     
     return output_filename, curr_epoch
 
-def scaler_file_patient_ids(dictionary:dict[str,Any], separator:str="-") -> str:
+def scaler_file_patient_ids(dictionaries:list[dict[str,Any]]|dict[str,Any], separator:str="-") -> str:
     """
     Generate a string using the `separator` to divide the numbers of the patient ids.
+    Each dictionary in the list will be added at the end of the string produced by the previous dictionary
     
     Args:
-        dictionary (dict[str,Any]): Dictionary with patient_id as key and anything as value
-        separator (str):            Separator to use to divide the patient ids
-    
-    Examples:
-        >>> scaler_file_patient_ids(dictionary, separator="_")
-        >>> '02_04_05_06_07_09_10_11_12_14_15_17_18_20_21_22_23_24'
-        >>> scaler_file_patient_ids(dictionary, separator="-")
-        >>> '02-04-05-06-07-09-10-11-12-14-15-17-18-20-21-22-23-24'
-        >>> scaler_file_patient_ids(dictionary, separator=" - ")
-        >>> '02 - 04 - 05 - 06 - 07 - 09 - 10 - 11 - 12 - 14 - 15 - 17 - 18 - 20 - 21 - 22 - 23 - 24'
+        dictionaries (dict[str,Any]):   List of fictionary with patient_id as key and anything as value
+        separator (str):                Separator to use to divide the patient ids
     """
-    return separator.join(sorted([key.replace("chb", "") for key in dictionary.keys()], key=lambda x : int(x)))
+    if not(isinstance(dictionaries, list)):
+        dictionaries= [dictionaries]
+    
+    string_list = []
+    for dictionary in dictionaries:
+        if (dictionary is None):
+            continue
+        string_list.append( separator.join(sorted([key.replace("chb", "") for key in dictionary.keys()], key=lambda x : int(x))) )
+    return separator.join(string_list)
 
 def pos_neg_samples(dictionary:dict[str, list[int]]):
     """
@@ -447,6 +448,8 @@ def additional_info(dataset_data:list[tuple[str,Any]]) -> str:
         ("USE_GRU", USE_GRU),
         ("HIDDEN_PER_STEP", HIDDEN_PER_STEP)
     ]
+    if (TAU != 0.5):
+        model_tuple.append(("TAU", TAU))
     model_str = "Model info:\n{}".format(dict_to_str(model_tuple))
     
     # GRAPH LEARNER

@@ -146,11 +146,16 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     average_sparsity = Loss_Meter("sparsity") if (DAMP_SPARSITY!=0) else None
     average_pred     = Loss_Meter("pred")     if (average_smooth or average_degree or average_sparsity) else None
     average_total    = Loss_Meter()
-    accuracy         = Accuracy_Meter([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA], num_classes=NUM_CLASSES)
-    conf_matrix      = ConfusionMatrix_Meter(NUM_CLASSES)
+    accuracy         = Accuracy_Meter([1.0, NUM_NOT_SEIZURE_DATA/NUM_SEIZURE_DATA], num_classes=NUM_CLASSES, tau=TAU)
+    conf_matrix      = ConfusionMatrix_Meter(NUM_CLASSES, tau=TAU)
     REDUCER          = FeatureReducer()
     SEIZURE_ANALYZER = SeizureInferenceAnalyzer()
-     
+    
+    # init parameters
+    loss_smooth = 0
+    loss_degree = 0
+    loss_sparsity = 0
+    
     # enable or not the gradients
     with (torch.enable_grad() if is_training else torch.no_grad()):
         for x,(target,patient_id,distance_seizure),adj in (tqdm(data_loader, desc=f"{'Train' if model.training else 'Eval'} current epoch", leave=False) if show_progress else data_loader):
@@ -165,12 +170,17 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
             node_matrix_for_smooth= node_matrix_for_smooth.reshape(node_matrix_for_smooth.size(0), node_matrix_for_smooth.size(1), -1)
             
             loss_pred = prediction_loss.compute_loss(result, target)
+            total_loss= loss_pred
             
-            loss_smooth= smoothness_loss_func(node_matrix_for_smooth, adj_matrix)
-            loss_degree= degree_regularization_loss_func(adj_matrix)
-            loss_sparsity= sparsity_loss_func(adj_matrix)
-            
-            total_loss= loss_pred + DAMP_SMOOTH*loss_smooth + DAMP_DEGREE*loss_degree + DAMP_SPARSITY*loss_sparsity
+            if (DAMP_SMOOTH != 0):
+                loss_smooth= smoothness_loss_func(node_matrix_for_smooth, adj_matrix)  
+                total_loss += DAMP_SMOOTH*loss_smooth
+            if (DAMP_DEGREE != 0):
+                loss_degree= degree_regularization_loss_func(adj_matrix)
+                total_loss += DAMP_DEGREE*loss_degree
+            if (DAMP_SPARSITY != 0):
+                loss_sparsity= sparsity_loss_func(adj_matrix)
+                total_loss += DAMP_SPARSITY*loss_sparsity
             
             if is_training:
                 optimizer.zero_grad()
@@ -200,6 +210,7 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     metrics= [
         average_total.get_metric(),
         accuracy.get_metric(),
+        accuracy.get_balanced_accuracy(),
         *accuracy.get_class_accuracy(),
         *accuracy.get_avg_target_prob(),
         conf_matrix.get_precision(),
@@ -388,10 +399,13 @@ def train(
             model.save(file_path)
             
             # save also an image of the dataset t-SNE projection
-            tsne_projected = TSNEProjector().project(REDUCER.get_features(), NUM_WORKERS)
-            intermediate = f"{folder_number}" if K_FOLD_VAL else ""
-            tsne_path = os.path.join(TSNE_SAVE_FOLDER, intermediate, f"{TSNE_NAME}_{epoch_num+START_EPOCH+1}")
-            EmbeddingVisualizer.plot(tsne_projected, REDUCER.get_labels(), title="T-SNE", show=False, background=BackgroundColorsMethod.GRID, save_path=tsne_path, dpi=250)
+            try:
+                tsne_projected = TSNEProjector().project(REDUCER.get_features(), NUM_WORKERS)
+                intermediate = f"{folder_number}" if K_FOLD_VAL else ""
+                tsne_path = os.path.join(TSNE_SAVE_FOLDER, intermediate, f"{TSNE_NAME}_{epoch_num+START_EPOCH+1}")
+                EmbeddingVisualizer.plot(tsne_projected, REDUCER.get_labels(), title="T-SNE", show=False, background=BackgroundColorsMethod.GRID, save_path=tsne_path, dpi=250)
+            except ValueError as e:
+                LOGGER.error(f"The following exception is raised: {str(e)}")
             
             # save also when the model is wrong
             if (SEIZURE_ANALYZER is not None):
@@ -633,7 +647,7 @@ def main_k_fold():
             # load model if exists or create a new model            
             model= generate_model(dataset_reduced, DEVICE)
             
-            folder_number = scaler_file_patient_ids(val_dict, separator="_")
+            folder_number = scaler_file_patient_ids([val_dict, test_dict], separator="_")
             filename, num_epoch = get_model(os.path.join(MODEL_SAVE_FOLDER, f"{os.path.basename(MODEL_SAVE_FOLDER)}_{folder_number}"), specific_num=save_num)
             
             START_EPOCH= num_epoch
