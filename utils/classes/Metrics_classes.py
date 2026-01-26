@@ -141,9 +141,13 @@ class ConfusionMatrix_Meter():
             :param num_classes (int):           Number of classes
             :param tau (float):                 Threshold for binary classification
         """
+        if (num_classes != 2):
+            raise NotImplementedError(f"For now the class can manage only when the input has 2 classes")
+        
         self.tau = tau
         self.num_classes = num_classes
         self.labels= range(num_classes)
+        self.num_samples_per_class = [0] * num_classes
         self.tp = 0.0  # True Positives
         self.tn = 0.0  # True Negatives
         self.fp = 0.0  # False Positives
@@ -166,24 +170,71 @@ class ConfusionMatrix_Meter():
         self.fp += cm[0, 1]
         self.fn += cm[1, 0]
         self.tp += cm[1, 1]
-
-    def get_precision(self) -> tuple[str, float]:
-        """Returns the name of the precision and the value of precision"""
-        if self.tp + self.fp == 0:
-            return "precision", 0.0
-        return "precision", self.tp / (self.tp + self.fp)
-
-    def get_recall(self) -> tuple[str, float]:
-        """Returns the name of the recall and the value of recall"""
-        if self.tp + self.fn == 0:
-            return "recall", 0.0
-        return "recall", self.tp / (self.tp + self.fn)
-    
-    def get_f1_score(self) -> tuple[str, float]:
-        """Returns the name of the f1-score and the value of f1-score"""
-        precision = self.get_precision()[1]
-        recall = self.get_recall()[1]
         
+        num_pos_samples = (target == 1).sum().item()
+        num_neg_samples = (target == 0).sum().item()
+        
+        self.num_samples_per_class[0] += num_neg_samples
+        self.num_samples_per_class[1] += num_pos_samples
+
+    def get_precision(self, label:int=None) -> tuple[str, float]:
+        """Returns the name of the precision and the value of precision"""
+        if (label is None) or (label==1):
+            tp, fp = self.tp, self.fp
+        elif (label==0):
+            tp, fp = self.tn, self.fn
+        else:
+            raise ValueError(f"Label {label} does not exists")
+        
+        name = "precision" if (label is None) else f"precision_class_{label}"
+        if tp + fp == 0:
+            return name, 0.0
+        return name, tp / (tp + fp)
+
+    def get_recall(self, label:int=None) -> tuple[str, float]:
+        """Returns the name of the recall and the value of recall"""
+        if (label is None) or (label==1):
+            tp, fn = self.tp, self.fn
+        elif (label==0):
+            tp, fn = self.tn, self.fp
+        else:
+            raise ValueError(f"Label {label} does not exists")
+        
+        name = "recall" if (label is None) else f"recall_class_{label}"
+        if tp + fn == 0:
+            return name, 0.0
+        return name, tp / (tp + fn)
+    
+    def get_f1_score(self, label:int=None) -> tuple[str, float]:
+        """Returns the name of the f1-score and the value of f1-score"""
+        precision = self.get_precision(label)[1]
+        recall = self.get_recall(label)[1]
+        
+        name = "f1-score" if (label is None) else f"f1-score_class_{label}"
         if precision + recall == 0:
-            return "f1-score", 0.0
-        return "f1-score", 2 * (precision * recall) / (precision + recall)
+            return name, 0.0
+        return name, 2 * (precision * recall) / (precision + recall)
+    
+    def get_f1_scores(self) -> list[tuple[str, float]]:
+        """Returns the name of the f1-score and the value of the f1-score for each class"""
+        f1_scores = []
+        for label in self.labels:
+            f1_scores.append(self.get_f1_score(label))
+        
+        return f1_scores
+
+    def get_weighted_f1_score(self) -> tuple[str, float]:
+        """Returns the name of the weighted f1-score and the value of weighted f1-score"""
+        f1_score_pos = self.get_f1_score(1)[1]
+        f1_score_neg = self.get_f1_score(0)[1]
+        
+        if (f1_score_pos == 0.0) and (f1_score_neg == 0.0):
+            return "weighted_f1_score", 0.0
+        
+        weight_pos_class = self.num_samples_per_class[1] / (self.num_samples_per_class[0] + self.num_samples_per_class[1])
+        weight_neg_class = self.num_samples_per_class[0] / (self.num_samples_per_class[0] + self.num_samples_per_class[1])
+        
+        weighted_f1_score_pos = weight_pos_class * f1_score_pos
+        weighted_f1_score_neg = weight_neg_class * f1_score_neg
+        
+        return "weighted_f1_score", (weighted_f1_score_pos + weighted_f1_score_neg)
