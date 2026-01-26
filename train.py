@@ -210,16 +210,17 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     metrics= [
         average_total.get_metric(),
         accuracy.get_metric(),
-        accuracy.get_balanced_accuracy(),
+        accuracy.get_macro_average(),
         *accuracy.get_class_accuracy(),
         *accuracy.get_avg_target_prob(),
         conf_matrix.get_precision(),
         conf_matrix.get_recall(),
         conf_matrix.get_f1_score(),
-        conf_matrix.get_precision(label=1),
-        conf_matrix.get_recall(label=1),
-        conf_matrix.get_f1_score(label=1),
-        conf_matrix.get_weighted_f1_score()
+        conf_matrix.get_precision(label=0),
+        conf_matrix.get_recall(label=0),
+        conf_matrix.get_f1_score(label=0),
+        conf_matrix.get_weighted_f1_score(),
+        conf_matrix.get_balanced_accuracy()
     ]
     for average,_ in loss_tuple:
         if (average is not None):

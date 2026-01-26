@@ -121,8 +121,8 @@ class Accuracy_Meter:
         
         return avg_probs
     
-    def get_balanced_accuracy(self) -> tuple[str, float]:
-        """Return ('balanced_accuracy', value)."""
+    def get_macro_average(self) -> tuple[str, float]:
+        """Return ('macro_average', value)."""
         total = 0
         count = 0
         for _,value in self.get_class_accuracy():
@@ -130,8 +130,8 @@ class Accuracy_Meter:
             count += 1
         
         if total == 0:
-            return "balanced_accuracy", 0.0
-        return "balanced_accuracy", total / count
+            return "macro_average", 0.0
+        return "macro_average", total / count
 
 class ConfusionMatrix_Meter():
     """Keep track of confusion matrix over time"""
@@ -177,6 +177,20 @@ class ConfusionMatrix_Meter():
         self.num_samples_per_class[0] += num_neg_samples
         self.num_samples_per_class[1] += num_pos_samples
 
+    def get_specificity(self, label:int=None) -> tuple[str, float]:
+        """Returns the name of the specificity and the value of specificity"""
+        if (label is None) or (label==1):
+            tn, fp = self.tn, self.fp
+        elif (label==0):
+            tn, fp = self.tp, self.fn
+        else:
+            raise ValueError(f"Label {label} does not exists")
+        
+        name = "specificity" if (label is None) else f"specificity_class_{label}"
+        if tn + fp == 0:
+            return name, 0.0
+        return name, tn / (tn + fp)
+    
     def get_precision(self, label:int=None) -> tuple[str, float]:
         """Returns the name of the precision and the value of precision"""
         if (label is None) or (label==1):
@@ -223,6 +237,14 @@ class ConfusionMatrix_Meter():
         
         return f1_scores
 
+    def get_balanced_accuracy(self):
+        """Returns the name of the balanced accuracy and the value of balanced accuracy"""
+        sensitivity = self.get_precision()[1]
+        specificity = self.get_specificity()[1]
+        
+        return "real_balanced_accuracy", (sensitivity + specificity) / 2
+        
+    
     def get_weighted_f1_score(self) -> tuple[str, float]:
         """Returns the name of the weighted f1-score and the value of weighted f1-score"""
         f1_score_pos = self.get_f1_score(1)[1]
