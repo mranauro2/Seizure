@@ -18,7 +18,16 @@ class Loss(ABC):
 
     def parameters(self):
         """Retuns all parameters of the class"""
-        return vars(self)
+        all_params = {}
+        current_vars = vars(self)
+
+        for key,value in current_vars.items():
+            if isinstance(value, Loss):
+                all_params.update( vars(value) )
+            else:
+                all_params[key] = value
+                
+        return all_params
 
 class LossDetection(Loss):
     @abstractmethod
@@ -122,3 +131,28 @@ class MSE(LossPrediction):
     @override
     def compute_loss(self, result:Tensor, target:Tensor):
         return mse_loss(result, target)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# WRAPPER CLASSES FOR WEIGHTING
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+class Reciprocal(LossDetection):
+    """Wrapper class to weight the loss"""
+    def __init__(self, loss:LossDetection, num_samples:list[int]):
+        """
+        Apply a custom damping coefficient to each samples. The coefficient is the reciprocal of the number of samples for the class
+        
+        Args:
+            loss (LossDetection):       Loss class to wrap
+            num_samples (list[int]):    Number of samples for each class
+        """
+        super().__init__()
+        self.loss = loss
+        self.reciprocal = torch.Tensor([1/num_sample for num_sample in num_samples])
+        if (len(self.reciprocal) != 2):
+            raise NotImplementedError(f"For now the class can manage only when the input has 2 classes")
+    
+    @override
+    def compute_loss(self, result, target):
+        weights = torch.where(target==0, self.reciprocal[0], self.reciprocal[1]).squeeze(-1)
+        return weights * self.loss.compute_loss(result, target)

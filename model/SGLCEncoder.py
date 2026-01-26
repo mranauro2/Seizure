@@ -126,7 +126,7 @@ class SGLC_Encoder(nn.Module):
     def _cell_forward(self, input_t:Tensor, supports:Tensor, hidden_state:Tensor=None):
         """
         Compute the new representation of the parameters using the stack of SGLCell modules
-            :param inputs (Tensor):                 Matrix of node with size (sequential_length, batch_size, num_nodes, input_dim)
+            :param input_t (Tensor):                Matrix of node with size (batch_size, num_nodes, input_dim)
             :param supports (Tensor):               Adjacency matrix with size (batch_size, num_nodes, num_nodes)
             :param initial_hidden_state (Tensor):   Not used. Present for compatibility
             :returns tuple(Tensor, Tensor, Tensor): Update matrices of the input
@@ -139,7 +139,7 @@ class SGLC_Encoder(nn.Module):
     def _cell_forward_GRU(self, input_t:Tensor, supports:Tensor, hidden_state:Tensor=None):
         """
         Compute the new representation of the parameters using the stack of SGLCell modules
-            :param inputs (Tensor):                 Matrix of node with size (sequential_length, batch_size, num_nodes, input_dim)
+            :param input_t (Tensor):                Matrix of node with size (batch_size, num_nodes, input_dim)
             :param supports (Tensor):               Adjacency matrix with size (batch_size, num_nodes, num_nodes)
             :param initial_hidden_state (Tensor):   Hidden state matrix with size (batch_size, num_nodes\*hidden_dim)
             :returns tuple(Tensor, Tensor, Tensor): Update matrices of the input
@@ -152,7 +152,7 @@ class SGLC_Encoder(nn.Module):
     def _cell_forward_GRU_hidden_per_step(self, input_t:Tensor, supports:Tensor, hidden_state:Tensor=None):
         """
         Compute the new representation of the parameters using the stack of SGLCell modules
-            :param inputs (Tensor):                 Matrix of node with size (sequential_length, batch_size, num_nodes, input_dim)
+            :param input_t (Tensor):                Matrix of node with size (batch_size, num_nodes, input_dim)
             :param supports (Tensor):               Adjacency matrix with size (batch_size, num_nodes, num_nodes)
             :param initial_hidden_state (Tensor):   Hidden state matrix with size (num_cells, batch_size, num_nodes\*hidden_dim)
             :returns tuple(Tensor, Tensor, Tensor): Update matrices of the input

@@ -110,6 +110,9 @@ LEARNING_RATE= 1e-5
 USE_WEIGHT= True
 """If True, will be use weighted loss if available"""
 
+USE_RECIPROCAL= False
+"""If True, will use reciprocal loss in addition to the computed loss"""
+
 FOCAL_LOSS_APLHA= 0.25
 """Weighting factor in range [0, 1] to balance positive vs negative examples. High weight for positive class. If None are set based on the representativeness of the classes"""
 

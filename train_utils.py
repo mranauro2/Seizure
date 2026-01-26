@@ -279,6 +279,9 @@ def generate_loss(logger:Logger|None, train_dict:dict[str, list[int]], do_train:
         case _:
             raise NotImplementedError("Loss {} is not implemented yet".format(loss_type))
 
+    if USE_RECIPROCAL:
+        loss = Reciprocal(loss, [NUM_NOT_SEIZURE_DATA, NUM_SEIZURE_DATA])
+    
     if (logger is not None):
         loss_params_str = dict_to_str(list(loss.parameters().items()))
         if (loss_params_str is not None):
