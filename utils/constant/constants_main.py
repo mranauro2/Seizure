@@ -67,6 +67,18 @@ EXCEPT_DATA= ["chb16"]
 K_FOLD_VAL= 2
 """Number of patients to use for each fold in the k-fold cross validation"""
 
+K_FOLD_VAL_IDS= [
+    ("chb02", "chb14", "chb06"),
+    ("chb19", "chb21", "chb22"),
+    ("chb09", "chb20", "chb17"),
+    ("chb07", "chb18", "chb04"),
+    ("chb13", "chb23", "chb03"),
+    ("chb10", "chb24", "chb01"),
+    ("chb11", "chb12", "chb05"),
+    ("chb08", "chb15")
+]
+"""List with tuple of patient ids to use ad validation in the fold"""
+
 K_FOLD_TEST= 1
 """Number of patients to use for each fold in the k-fold cross test""" 
 

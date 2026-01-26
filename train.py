@@ -571,8 +571,18 @@ def main_k_fold():
     if (EXCEPT_DATA is not None):
         remaining_data, _ = split_patient_data_specific(dataset_reduced.targets_dict(), EXCEPT_DATA)
     
-    # splitting data
-    k_fold = k_fold_split_patient_data(remaining_data, val_remaining_patients=(K_FOLD_VAL+K_FOLD_TEST))
+    # splitting data (case custom folds)
+    if (K_FOLD_VAL_IDS is not None) and (len(K_FOLD_VAL_IDS) > 0):
+        LOGGER.info(f"Using custom dataset split")
+        k_fold = []
+        for validation_ids in K_FOLD_VAL_IDS:
+            k_fold.append( split_patient_data_specific(remaining_data, validation_ids) )
+    
+    # splitting data (case standard folds)
+    else:
+        k_fold = k_fold_split_patient_data(remaining_data, val_remaining_patients=(K_FOLD_VAL+K_FOLD_TEST))
+    
+    # use the not reduced dataset for the test sets
     if (K_FOLD_TEST is not None) and (K_FOLD_TEST > 0):
         k_fold = split_nested_dicts(k_fold, K_FOLD_TEST)
         for _,_,test_dict in k_fold:
