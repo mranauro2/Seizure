@@ -239,11 +239,10 @@ class ConfusionMatrix_Meter():
 
     def get_balanced_accuracy(self):
         """Returns the name of the balanced accuracy and the value of balanced accuracy"""
-        sensitivity = self.get_precision()[1]
+        sensitivity = self.get_recall()[1]
         specificity = self.get_specificity()[1]
         
-        return "real_balanced_accuracy", (sensitivity + specificity) / 2
-        
+        return "real_balanced_accuracy", (sensitivity + specificity) / 2 
     
     def get_weighted_f1_score(self) -> tuple[str, float]:
         """Returns the name of the weighted f1-score and the value of weighted f1-score"""
