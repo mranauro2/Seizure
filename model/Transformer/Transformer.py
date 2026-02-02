@@ -95,6 +95,7 @@ class Transformer(nn.Module):
                 self._forward = self._forward_transformer
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", message="enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.self_attn.num_heads is odd")
+                    warnings.filterwarnings("ignore", message="enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.activation_relu_or_gelu was not True")
                     self.transf = nn.Transformer(
                         d_model              = d_model,
                         nhead                = num_heads,
