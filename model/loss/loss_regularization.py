@@ -93,4 +93,4 @@ def sparsity_loss_func(adj_matrix:Tensor):
     num_nodes= adj_matrix.shape[-1]
     damping_factor= 1/(num_nodes**2)
     result = damping_factor * torch.norm(adj_matrix, p='fro', dim=(-2, -1))
-    return torch.Tensor([1e17]) if (result.item() == float('inf')) else result
+    return torch.where(result == float('inf'), 1e17, result)
