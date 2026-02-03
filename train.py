@@ -208,6 +208,8 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
     model.eval()
     
     metrics= [
+        conf_matrix.get_f1_score(),
+        
         average_total.get_metric(),
         accuracy.get_metric(),
         accuracy.get_macro_average(),
@@ -215,7 +217,7 @@ def train_or_eval_detection(data_loader:DataLoader, model:SGLC_Classifier, predi
         *accuracy.get_avg_target_prob(),
         conf_matrix.get_precision(),
         conf_matrix.get_recall(),
-        conf_matrix.get_f1_score(),
+        
         conf_matrix.get_precision(label=0),
         conf_matrix.get_recall(label=0),
         conf_matrix.get_f1_score(label=0),
@@ -566,6 +568,7 @@ def main_k_fold():
     dataset:SeizureDatasetDetection= None
     dataset_reduced:SeizureDatasetDetection= None
     dataset, dataset_reduced = generate_datasets(LOGGER, input_dir, files_record, method, lambda_value, scaler_type, preprocess_dir)
+    dataset_validation = dataset_reduced if DATASET_REDUCED_FOR_VALIDATION else dataset
     
     # removing unwanted patients
     remaining_data = dataset_reduced.targets_dict()
@@ -641,7 +644,7 @@ def main_k_fold():
             train_dict , val_dict, test_dict = (*dictionaries, None) if (len(dictionaries)==2) else dictionaries
             train_dict = augment_dataset_train(None, dataset_reduced, train_dict)
             train_set= subsets_from_patient_splits(dataset_reduced, dataset_reduced.targets_index_map(), train_dict)
-            val_set=   subsets_from_patient_splits(dataset_reduced, dataset_reduced.targets_index_map(), val_dict)
+            val_set=   subsets_from_patient_splits(dataset_validation, dataset_validation.targets_index_map(), val_dict)
             test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict) if (test_dict is not None) else None
             
             # generating new scaler
@@ -706,6 +709,7 @@ def main_test_set():
     dataset:SeizureDatasetDetection= None
     dataset_reduced:SeizureDatasetDetection= None
     dataset, dataset_reduced = generate_datasets(LOGGER, input_dir, files_record, method, lambda_value, scaler, preprocess_dir)
+    dataset_validation = dataset_reduced if DATASET_REDUCED_FOR_VALIDATION else dataset
     
     # splitting data, augment train set and removing unwanted patients
     remaining_data = split_patient_data_specific(dataset_reduced.targets_dict(), EXCEPT_DATA)[0] if (EXCEPT_DATA is not None) else dataset.targets_dict()
@@ -720,7 +724,7 @@ def main_test_set():
     train_dict = augment_dataset_train(LOGGER, dataset_reduced, train_dict)
     
     train_set= subsets_from_patient_splits(dataset_reduced, dataset_reduced.targets_index_map(), train_dict)
-    val_set=   subsets_from_patient_splits(dataset_reduced, dataset_reduced.targets_index_map(), val_dict)
+    val_set=   subsets_from_patient_splits(dataset_validation, dataset_validation.targets_index_map(), val_dict)
     test_set=  subsets_from_patient_splits(dataset, dataset.targets_index_map(), test_dict) if (test_dict is not None) else None
     
     # global variables

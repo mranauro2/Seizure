@@ -106,6 +106,9 @@ RANDOM_SEED= 0
 DATASET_REDUCTION= 9
 """Ratio of negative samples to maintain after the reduction. If not set, no reduction will be applied"""
 
+DATASET_REDUCED_FOR_VALIDATION= True
+"""Use the reduced dataset for the validation sets"""
+
 DATASET_REDUCTION_SEED= 0
 """Seed for reduction sampling reproducibility"""
 
