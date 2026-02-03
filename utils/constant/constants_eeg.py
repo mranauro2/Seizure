@@ -194,9 +194,9 @@ TRANSFORMER_ACT= None
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Non-linear activation function to use in the :data:`model.Transformer.Transformer` module"""
 
-NUM_INPUTS= MAX_SEQ_LEN if (TRANSFORMER_TYPE is not None) else None
+SPREAD_SEQUENCE_FACTOR= 1
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
-Number of inputs passed during the forward method in the :data:`model.Transformer.Transformer` module"""
+How much the sequence must be divided from the original length in the :data:`model.Transformer.Transformer` module"""
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # GATED GRAPH NEURAL NETWORKS VALUES

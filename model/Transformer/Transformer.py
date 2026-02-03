@@ -27,14 +27,14 @@ class Transformer(nn.Module):
             
             *,
             
-            num_inputs:int=None
+            spread_sequence_factor:int=1
         ):
         """
         Generate the transformer class according to the type passed as parameter. The output will have the same size as a single input
 
         Args:
             transformer_type (TransformerType):             Type of transformer class to use
-            input_shape (Sequence[int]):                    Shape of the 2D input where the number of expected features in the input is the second dimension. It is [input_dim, d_model]
+            input_shape (Sequence[int]):                    Shape of the 3D input [sequence_length, num_nodes, input_dim]
             num_heads (int):                                Number of heads in the multi-heads attention models
             
             num_encoder_layers (int):                       Number of sub-encoder layers in the encoder
@@ -48,15 +48,17 @@ class Transformer(nn.Module):
             seed (int):                                     Sets the seed for the weights initializations. If None, don't use any seed
             device (str):                                   Device to place the model on
 
-            num_inputs (int):                               Number of inputs passed. Necessary only for some types of positional encodings
+            spread_sequence_factor (int):                   Each time step of the `sequence_length` will be divided in more time steps
         See:
         -----
             :func:`torch.nn.Transformer` for more details
         """
         super(Transformer, self).__init__()
         
-        if (len(input_shape) != 2):
-            raise ValueError("Expected 'input_shape' as 2D but got {}-D".format(len(input_shape)))
+        if (len(input_shape) != 3):
+            raise ValueError("Expected 'input_shape' as 3D but got {}-D".format(len(input_shape)))
+        if (spread_sequence_factor <= 0):
+            raise ValueError("'spread_information_factor' must be positve")
         
         if (transformer_type == TransformerType.TRANSFORMER_ENCODER) and (num_decoder_layers is not None) and (num_decoder_layers != 0):
             msg = "'num_decoder_layers' will be ignored because the type is set to {}".format(transformer_type.name)
@@ -65,28 +67,34 @@ class Transformer(nn.Module):
             msg = "'num_encoder_layers' will be ignored because the type is set to {}".format(transformer_type.name)
             warnings.warn(msg)
         
-        d_model = input_shape[1]
+        sequence_length, num_nodes, input_dim = input_shape
+        self.new_sequence_length = spread_sequence_factor * sequence_length
+        self.new_input_dim = input_dim // spread_sequence_factor
+        if (input_dim % spread_sequence_factor != 0):
+            raise ValueError("The sequence cannot be extended from ({}) to ({}) because the input dimension ({}) is not divisible by ({})".format(
+                sequence_length, self.new_sequence_length, input_dim, spread_sequence_factor
+            ))
+        
+        d_model = num_nodes * self.new_input_dim
         for curr_num_heads in range(num_heads, 0, -1):
             if (d_model % curr_num_heads == 0):
                 if (curr_num_heads != num_heads):
-                    msg = "The number of heads is reduced from ({}) to ({}), otherwise second dimension of 'input_shape' ({}) was not divisible by the number of heads".format(num_heads, curr_num_heads, d_model)
+                    msg = "The number of heads is reduced from ({}) to ({}), otherwise second dimension of 'd_model' ({}*{}) was not divisible by the number of heads".format(num_heads, curr_num_heads, num_nodes, self.new_input_dim)
                     warnings.warn(msg)
                     num_heads = curr_num_heads
                 break
         
         if (seed is not None):
             torch.manual_seed(seed)
-        self.sos_token = torch.nn.Parameter(torch.randn(1, input_shape[0], input_shape[1])).to(device=device)
-        self.cls_token = torch.nn.Parameter(torch.randn(1, input_shape[0], input_shape[1])).to(device=device)
+        self.sos_token = torch.nn.Parameter(torch.randn(1, 1, d_model)).to(device=device)
+        self.cls_token = torch.nn.Parameter(torch.randn(1, 1, d_model)).to(device=device)
         activation = activation_resolver(activation)
         
         match positional_encoding:
             case None:
                 self.pe = None
             case PositionalEncodingType.SINUSOIDAL:
-                if (num_inputs is None) or (num_inputs <= 0):
-                    raise ValueError("'num_inputs' must be positive")
-                self.pe = SinusoidalPositionalEncoding(d_model=input_shape[1], max_len=num_inputs*input_shape[0], device=device)
+                self.pe = SinusoidalPositionalEncoding(d_model=d_model, max_len=self.new_sequence_length, device=device)
             case _:
                 raise NotImplementedError("Positional encoder {} is not implemented yet".format(positional_encoding))
         
@@ -145,10 +153,19 @@ class Transformer(nn.Module):
     
     def _forward_preprocessing(self, inputs:Tensor):
         """Preprocessing to apply to the input before the forward method. See :func:`self.forward` for more detail about the parameters"""
+        inputs = inputs.transpose(-1, -2)                                                                           # (batch_size, sequence_length,     input_dim,          num_nodes)
+        inputs = inputs.reshape(inputs.shape[0], self.new_sequence_length, self.new_input_dim, inputs.shape[-1])    # (batch_size, new_sequence_length, new_input_dim,      num_nodes)
+        inputs = inputs.transpose(-1, -2)                                                                           # (batch_size, new_sequence_length, num_nodes,          new_input_dim)
+        inputs = inputs.reshape(inputs.shape[0], inputs.shape[1], -1)                                               # (batch_size, new_sequence_length, num_nodes*new_input_dim)
+        
         if (self.pe is not None):
             inputs = self.pe[inputs]
         return inputs
-      
+    
+    def _forward_postprocessing(self, output:Tensor):
+        """Postprocessing to apply at the output of the Transformer"""
+        return output.squeeze(1).reshape(output.shape[0], -1, self.new_input_dim)
+    
     def _forward_transformer(self, inputs:Tensor) -> Tensor:
         """See :func:`self.forward` for more detail"""
         batch_size = inputs.size(0)
@@ -177,11 +194,12 @@ class Transformer(nn.Module):
     def forward(self, inputs:Tensor) -> Tensor:
         """
         Given a sequence of token classify the next token
-            :param inputs (Tensor): Sequence of input with size `(batch_size, num_inputs*input_dim, d_model)` where `input_dim` and `d_model` are respectively the first and the second dimension of `input_shape`
-            :returns cls (Tensor):  Next input token with size `(batch_size, input_dim, d_model)`
+            :param inputs (Tensor): Sequence of input with size `(batch_size, sequence_length, num_nodes, input_dim)`
+            :returns cls (Tensor):  Next input token with size `(batch_size, num_nodes, input_dim//spread_sequence_factor)`
         """
         inputs = self._forward_preprocessing(inputs)
-        return self._forward(inputs)
+        output = self._forward(inputs)
+        return self._forward_postprocessing(output)
 
     def _forward(self, inputs:Tensor):
         raise NotImplementedError("This function is only a decoration")

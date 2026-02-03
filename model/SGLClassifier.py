@@ -26,6 +26,7 @@ class SGLC_Classifier(nn.Module):
             num_cells:int=1,
             input_dim:int=100,
             num_nodes:int=10,
+            sequence_length:int=4,
             
             graph_skip_conn:float=0.3,
             use_GRU:bool=False,
@@ -57,6 +58,7 @@ class SGLC_Classifier(nn.Module):
             dim_feedforward:int=None,
             dropout_transf=None,
             act_transf:str|Callable=None,
+            spread_sequence_factor:int=1,
             
             seed:int=None,
             device:str=None,
@@ -73,6 +75,7 @@ class SGLC_Classifier(nn.Module):
             num_cells (int):                                Number of the SGLCell layers in the encoder stack
             input_dim (int):                                Feature dimension of input nodes
             num_nodes (int):                                Number of nodes in both input graph and hidden state
+            sequence_length (int):                          Which is the length of the data
             
             graph_skip_conn (float):                        Skip connection weight for adjacency updates
             use_GRU (bool):                                 Use GRU to compute a hidden state used in the Gated Graph Neural Networks module
@@ -103,11 +106,12 @@ class SGLC_Classifier(nn.Module):
             positional_encoding (PositionalEncodingType):   Type of positional encoder to use in the Transformer module (only if `transformer_type` is not None)
             dim_feedforward (int):                          Dimension of the feedforward network model in the Transformer module (only if `transformer_type` is not None)
             dropout_transf (float):                         Dropout value in the Transformer module (only if `transformer_type` is not None)
-            act_transf (str|Callable):                      Activation funcion of the encoder/decoder intermediate layer in the Transformer module. If None use the default class value (only if `transformer_type` is not None)
+            act_transf (str|Callable):                      Activation funcion of the encoder/decoder intermediate layer in the Transformer module
+            spread_sequence_factor (int):                   Given an input of a `sequence_length` length, it will divided in more steps in the Transformer module
             
             seed (int):                                     Sets the seed for the weights initializations. If None, don't use any seed
             device (str):                                   Device to place the model on
-            **kwargs:                                       Additional arguments of `SGLC_Encoder` and `Transformer`
+            **kwargs:                                       Additional arguments of `SGLC_Encoder`
         """
         super(SGLC_Classifier, self).__init__()
 
@@ -159,9 +163,6 @@ class SGLC_Classifier(nn.Module):
             **kwargs
         )
         
-        
-        keys_transformer = ["num_inputs"]
-        kwargs_transformer = {key:value for key,value in kwargs.items() if (key in keys_transformer) and (value is not None)}
         transformer_params = (
             (num_transf_heads    is not None) or
             (num_encoder_layers  is not None) or
@@ -174,9 +175,8 @@ class SGLC_Classifier(nn.Module):
         
         if (pretrain_with_decoder):
             self.decoder = deepcopy(self.encoder)
-            if ( transformer_params or ( len(kwargs_transformer)!=0 ) ):
-                others_msg = ". Some of them are : '{}'".format("', '".join(kwargs_transformer.keys())) if (len(kwargs_transformer)!=0) else ""
-                msg = "'transformer_type' is None but some parameters regarding to it have been passed{}".format(others_msg)
+            if ( transformer_params ):
+                msg = "'transformer_type' is None but some parameters regarding to it have been passed"
                 raise ValueError(msg)
         
         elif (transformer_type is None):
@@ -187,25 +187,24 @@ class SGLC_Classifier(nn.Module):
             self.transf = None
             
         else:
-            if act_transf is not None:
-                kwargs_transformer['activation'] = act_transf
             self.transf = Transformer(
-                transformer_type    = transformer_type,
-                input_shape         = [num_nodes, input_dim],
-                num_heads           = num_transf_heads,
-                num_encoder_layers  = num_encoder_layers,
-                num_decoder_layers  = num_decoder_layers,
-                positional_encoding = positional_encoding,
-                dim_feedforward     = dim_feedforward,
-                dropout             = dropout_transf,
-                seed                = seed,
-                device              = device,
-                **kwargs_transformer,
+                transformer_type        = transformer_type,
+                input_shape             = [sequence_length, num_nodes, input_dim],
+                num_heads               = num_transf_heads,
+                num_encoder_layers      = num_encoder_layers,
+                num_decoder_layers      = num_decoder_layers,
+                positional_encoding     = positional_encoding,
+                dim_feedforward         = dim_feedforward,
+                dropout                 = dropout_transf,
+                activation              = act_transf,
+                spread_sequence_factor  = spread_sequence_factor,
+                seed                    = seed,
+                device                  = device
             )
         
         if not(self.pretrain_with_decoder):
             self.fc= nn.Sequential(
-                nn.Linear(num_nodes*input_dim, num_classes*4, device=device),
+                nn.Linear(num_nodes * (input_dim//spread_sequence_factor), num_classes*4, device=device),
                 nn.LeakyReLU(negative_slope=0.2),
                 nn.Linear(num_classes*4, num_classes, device=device),
             )
@@ -276,8 +275,6 @@ class SGLC_Classifier(nn.Module):
         """Process input according to the transformer and last fully connected layer using the `self.forward` parameters"""
         if (self.transf is not None):
             input_clone = input_seq.clone()
-            # Reshape: (batch_size, sequential_length, num_nodes, input_dim) --> (batch_size, seq_length*num_nodes, input_dim)
-            input_clone = input_clone.reshape(input_clone.size(0), -1, input_clone.size(-1))
             last_feature = self.transf(input_clone)
         else:
             last_feature = input_seq[:, -1, :, :]

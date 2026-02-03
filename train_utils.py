@@ -127,6 +127,7 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
         num_cells               = NUM_CELLS,
         input_dim               = input_dim,
         num_nodes               = num_nodes,
+        sequence_length         = MAX_SEQ_LEN,
         
         graph_skip_conn         = GRAPH_SKIP_CONN,
         use_GRU                 = USE_GRU,
@@ -159,7 +160,7 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
         dropout_transf          = TRANSFORMER_DROPOUT,
         act_transf              = TRANSFORMER_ACT,
         
-        num_inputs              = NUM_INPUTS,
+        spread_sequence_factor  = SPREAD_SEQUENCE_FACTOR,
         
         use_sigmoid             = USE_SIGMOID,
         act                     = GL_ACT,
@@ -494,7 +495,7 @@ def additional_info(dataset_data:list[tuple[str,Any]]) -> str:
         ("TRANSFORMER_DROPOUT", TRANSFORMER_DROPOUT),
         ("TRANSFORMER_ACT", TRANSFORMER_ACT),
         ("POSITIONAL_ENCODING", POSITIONAL_ENCODING),
-        ("NUM_INPUTS", NUM_INPUTS)
+        ("SPREAD_SEQUENCE_FACTOR", SPREAD_SEQUENCE_FACTOR)
     ]
     transformer_str = "Tansformer info:\n{}".format(dict_to_str(transformer_tuple))
     
