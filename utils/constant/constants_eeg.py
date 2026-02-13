@@ -147,6 +147,10 @@ USE_SIGMOID= False
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Use the sigmoid as activation function after the computation of the attention in the :data:`model.GraphLearner.GraphLearner` module"""
 
+REMOVE_SOFTMAX= False
+"""Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
+Do not use the softmax function after the computation of the output in the :data:`model.GraphLearner.GraphLearner` module"""
+
 USE_GL_GATv2= False
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Use GATV2 instead of GAT for the multi-head attention in the :data:`model.GraphLearner.GraphLearner` module"""
@@ -224,6 +228,10 @@ Non-linear activation function to use between the two fully-connected layers in 
 ACT_LAST_GGNN= 'sigmoid'
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
 Non-linear activation function to use after the second fully-connected layers in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
+
+COMMON_WEIGHTS= True
+"""Used in :data:`model.SGLClassifier.SGLC_Classifier` \\
+Use a common weight matrix instead of two different matrices in the Propagator modules in the :data:`model.GatedGraphNeuralNetworks.GGNNLayer` module"""
 
 NUM_GGNN_HEADS= 0
 """Used in :data:`model.SGLClassifier.SGLC_Classifier` \\

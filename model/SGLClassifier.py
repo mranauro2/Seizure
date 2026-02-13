@@ -47,6 +47,7 @@ class SGLC_Classifier(nn.Module):
             num_GGNN_layers:int=1,
             act_mid_GGNN:str|Callable=None,
             act_last_GGNN:str|Callable=None,
+            common_weights:bool=False,
             v2_GGNN:bool=False,
             num_GGNN_heads:int=0,
             
@@ -96,6 +97,7 @@ class SGLC_Classifier(nn.Module):
             num_GGNN_layers (int):                          Number of Propagation modules in the Gated Graph Neural Networks module
             act_mid_GGNN (str|Callable):                    The non-linear activation function to use between the two fully-connected layers in the Gated Graph Neural Networks module, if provided
             act_last_GGNN (str|Callable):                   The non-linear activation function to use after the second fully-connected layers in the Gated Graph Neural Networks module, if provided
+            common_weights (bool):                          Use a common weight matrix instead of different matrices in the Propagator modules in the Gated Graph Neural Networks module
             v2_GGNN (bool):                                 Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
             num_GGNN_heads (int):                           Number of heads for multi-head attention in the Gated Graph Neural Networks module
             
@@ -127,6 +129,9 @@ class SGLC_Classifier(nn.Module):
                 warnings.warn("'new_pretrain_hidden' parameter is ignored because 'pretrain_with_decoder' is False")
             if (pretrain_with_decoder) and not(use_GRU):
                 warnings.warn("'new_pretrain_hidden' parameter is ignored because 'use_GRU' is False")
+        if( transformer_type is None) and (spread_sequence_factor != 1):
+            msg = "'spread_sequence_factor' can be different only if is used the transformer. Forced set to 1"
+            spread_sequence_factor = 1
 
         self.device= device
         self.use_GRU= use_GRU
@@ -155,6 +160,7 @@ class SGLC_Classifier(nn.Module):
             num_GGNN_layers = num_GGNN_layers,
             act_mid_GGNN    = act_mid_GGNN,
             act_last_GGNN   = act_last_GGNN,
+            common_weights  = common_weights,
             v2_GGNN         = v2_GGNN,
             num_GGNN_heads  = num_GGNN_heads,
             
@@ -180,9 +186,8 @@ class SGLC_Classifier(nn.Module):
                 raise ValueError(msg)
         
         elif (transformer_type is None):
-            if ( transformer_params or ( len(kwargs_transformer)!=0 ) ):
-                others_msg = ". Some of them are : '{}'".format("', '".join(kwargs_transformer.keys())) if (len(kwargs_transformer)!=0) else ""
-                msg = "'transformer_type' is None and some parameters regarding to it have been ignored{}".format(others_msg)
+            if ( transformer_params ):
+                msg = "'transformer_type' is None and some parameters regarding to it have been ignored"
                 warnings.warn(msg)
             self.transf = None
             

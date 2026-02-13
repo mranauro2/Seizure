@@ -36,6 +36,7 @@ class SGLC_Encoder(nn.Module):
             num_GGNN_layers:int=1,
             act_mid_GGNN:str|Callable=None,
             act_last_GGNN:str|Callable=None,
+            common_weights:bool=False,
             v2_GGNN:bool=False,
             num_GGNN_heads:int=0,
             
@@ -68,6 +69,7 @@ class SGLC_Encoder(nn.Module):
             num_GGNN_layers (int):                  Number of Propagation modules in the Gated Graph Neural Networks module
             act_mid_GGNN (str|Callable):            The non-linear activation function to use between the two fully-connected layers in the Gated Graph Neural Networks module, if provided
             act_last_GGNN (str|Callable):           The non-linear activation function to use after the second fully-connected layers in the Gated Graph Neural Networks module, if provided
+            common_weights (bool):      Use a common weight matrix instead of different matrices in the Propagator modules in the Gated Graph Neural Networks module
             v2_GGNN (bool):                         Use GATV2 instead of GAT for the multi-head attention in the Gated Graph Neural Networks module
             num_GGNN_heads (int):                   Number of heads for multi-head attention in the Gated Graph Neural Networks module
             
@@ -113,6 +115,7 @@ class SGLC_Encoder(nn.Module):
                     num_GGNN_layers = num_GGNN_layers,
                     act_mid_GGNN    = act_mid_GGNN,
                     act_last_GGNN   = act_last_GGNN,
+                    common_weights  = common_weights,
                     v2_GGNN         = v2_GGNN,
                     num_GGNN_heads  = num_GGNN_heads,
                     

@@ -20,42 +20,66 @@ class GGNNType(Enum):
     """Use `GAT` attention from `torch_geometric.nn`\\
     Can be add the parameter `v2` to choose if use `GATv2Conv` rather than `GATConv` and `num_heads`"""
 
+class Gate(nn.Module):
+    def __init__(self, input_dim_1:int, input_dim_2:int, act:Callable=None, common_weights:bool=True, device:str=None):
+        """
+        Aggregate the inputs using two weight matrices
+
+        Args:
+            input_dim_1 (int):      Input of the first matrix passed in the forward method
+            input_dim_2 (int):      Input of the second matrix passed in the forward method
+            act (Callable):         Activation function to use. If None, do not use any activation function
+            common_weights (bool):  Use only one common weight matrix instead of two
+            device (str):           Device to place the model on
+        """
+        super(Gate, self).__init__()
+        if common_weights:
+            self.linear = nn.Linear(input_dim_1 + input_dim_2, input_dim_2, device=device)
+        else:
+            self.linear_1 = nn.Linear(input_dim_1, input_dim_2, device=device)
+            self.linear_2 = nn.Linear(input_dim_2, input_dim_2, device=device)
+        
+        self.common_weights = common_weights
+        self.act = act if (act is not None) else nn.Identity()
+        self.act = self.act.to(device=device)
+    
+    def forward(self, input_1:Tensor, input_2:Tensor):        
+        if self.common_weights:
+            output = self.linear(torch.cat([input_1, input_2], dim=2))
+        else:
+            output_1 = self.linear_1(input_1)
+            output_2 = self.linear_2(input_2)
+            output = output_1 + output_2
+            
+        return self.act(output)
+
 class Propagator(nn.Module):
     """
     Gated Propagator for GGNN using GRU-style gating mechanism
     """
-    def __init__(self, state_dim:int, device:str=None):
+    def __init__(self, state_dim:int, common_weights:bool=True, device:str=None):
         """
         Propagates the input through the adjacency matrix using both incoming and outgoing edges, controlled by learned reset and update gates.
         
         Args:
-            state_dim (int):    Dimension of node features used in the `forward` method
-            device (str):       Device to place the model on
+            state_dim (int):        Dimension of node features used in the `forward` method
+            common_weights (bool):  Use a common weight matrix instead of different matrices
+            device (str):           Device to place the model on
         """
         super(Propagator, self).__init__()
         self.state_dim = state_dim
 
-        self.reset_gate = nn.Sequential(
-            nn.Linear(state_dim * 3, state_dim),
-            nn.Sigmoid()
-        ).to(device=device)
-        self.update_gate = nn.Sequential(
-            nn.Linear(state_dim * 3, state_dim),
-            nn.Sigmoid()
-        ).to(device=device)
-        self.transform = nn.Sequential(
-            nn.Linear(state_dim * 3, state_dim),
-            nn.Tanh()
-        ).to(device=device)
+        self.reset_gate =   Gate(state_dim * 2, state_dim, nn.Sigmoid(), common_weights, device)
+        self.update_gate =  Gate(state_dim * 2, state_dim, nn.Sigmoid(), common_weights, device)
+        self.transform =    Gate(state_dim * 2, state_dim, nn.Tanh(),    common_weights, device)
 
     def forward(self, x:Tensor, supports:Tensor) -> Tensor:
         """
         Compute the new representation of the input matrix by:
         1. Aggregate features from incoming (A·x) and outgoing (A^T·x) neighbors
-        2. Concatenate with current features: [A·x || A^T·x || x]
-        3. Compute reset (r) and update (z) gates
-        4. Compute candidate state: h_hat = tanh(W·[A·x || A^T·x || r⊙x])
-        5. Update: output = (1-z)⊙x + z⊙h_hat
+        2. Compute reset (r) and update (z) gates
+        3. Compute candidate state h_hat
+        4. Update: output = (1-z)⊙x + z⊙h_hat
         
         Args:
             x (Tensor):         Node features matrix with size (batch_size, num_nodes, state_dim)
@@ -67,14 +91,12 @@ class Propagator(nn.Module):
         a_in =  torch.matmul(supports, x)
         a_out = torch.matmul(supports.transpose(1, 2), x)   # transposing to obtain a new (batch_size, num_nodes, num_nodes) matrix
 
-        a = torch.cat((a_in, a_out, x), dim=2)
+        a = torch.cat((a_in, a_out), dim=2)
 
-        r = self.reset_gate(a)
-        z = self.update_gate(a)
+        r = self.reset_gate(a, x)
+        z = self.update_gate(a, x)
         
-        joined_input = torch.cat((a_in, a_out, r * x), dim=2)
-        
-        h_hat = self.transform(joined_input)
+        h_hat = self.transform(a, (r * x))
 
         output = (1 - z) * x + z * h_hat
 
@@ -96,6 +118,7 @@ class GGNNLayer(nn.Module):
             
             act_mid:str|Callable=None,
             act_last:str|Callable=None,
+            common_weights:bool=True,
             
             seed:int=None,
             device:str=None,
@@ -118,6 +141,7 @@ class GGNNLayer(nn.Module):
             
             act_mid (str|Callable):     The non-linear activation function to use between the two fully-connected layers, if provided
             act_last (str|Callable):    The non-linear activation function to use after the second fully-connected layers, if provided
+            common_weights (bool):      Use a common weight matrix instead of different matrices in the Propagator modules
             seed (int):                 Sets the seed for the weights initializations. If None, don't use any seed
             device (str):               Device to place the model on
             
@@ -151,11 +175,14 @@ class GGNNLayer(nn.Module):
         if not( (type == GGNNType.PROPAGATOR) or (type == GGNNType.GRU) ) and ( (num_steps is not None) and (num_steps != 0) ):
             msg = "The parameter 'num_steps' is ignored because the type is not set {} or {}".format(GGNNType.PROPAGATOR.name, GGNNType.GRU.name)
             warnings.warn(msg)
+        if not(type == GGNNType.PROPAGATOR) and (common_weights):
+            msg = "'common_weights' cannot be used when the type is not {}".format(GGNNType.PROPAGATOR.name)
+            warnings.warn(msg)
         
         match type:
             case GGNNType.PROPAGATOR:
                 self._forward = self._forward_propagator
-                self.propagators = self._build_propagator(input_dim, num_layers, device=device)
+                self.propagators = self._build_propagator(input_dim, num_layers, common_weights, device=device)
                 
             case GGNNType.GRU:
                 self._forward = self._forward_GRU
@@ -186,12 +213,12 @@ class GGNNLayer(nn.Module):
             if param.dim() > 1:
                 nn.init.xavier_uniform_(param)
     
-    def _build_propagator(self, input_dim:int, num_layers:int, device:str):
+    def _build_propagator(self, input_dim:int, num_layers:int, common_weights:bool, device:str):
         """Builds standard Propagator layer(s)"""
         layers = nn.ModuleList()
         for _ in range(num_layers):
             layers.append(
-                Propagator(input_dim, device=device)
+                Propagator(input_dim, common_weights, device=device)
             )
         return layers
     

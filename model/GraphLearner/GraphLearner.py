@@ -37,6 +37,7 @@ class GraphLearner(nn.Module):
             
             seed:int=None,
             use_sigmoid:bool=False,
+            remove_softmax:bool=False,
             act:str|Callable='relu',
             v2:bool=False,
             concat:bool=False,
@@ -59,6 +60,7 @@ class GraphLearner(nn.Module):
             
             seed (int):                         Sets the seed for the weights initializations. If None, don't use any seed
             use_sigmoid (bool):                 Use the sigmoid as activation function after the computation of the attention
+            remove_softmax (bool):              Do not use the softmax function after the computation of the output
             act (str|Callable):                 The non-linear activation function to use
             v2 (bool):                          Use GATV2 instead of GAT for the multi-head attention
             concat (bool):                      If True the multi-head attentions are concatenated, otherwise are averaged
@@ -68,6 +70,7 @@ class GraphLearner(nn.Module):
         self.epsilon = epsilon
         self.attention_type = attention
         self.use_sigmoid = use_sigmoid
+        self.use_softmax = not(remove_softmax)
         
         # Check errors
         if (num_layers < 1):
@@ -250,7 +253,8 @@ class GraphLearner(nn.Module):
         if self.use_sigmoid:
             attention = torch.sigmoid(attention)
         
-        attention = torch.softmax(attention, dim=-1)
+        if (self.use_softmax):
+            attention = torch.softmax(attention, dim=-1)
         if (self.epsilon is not None):
             attention = self._build_epsilon_neighbourhood(attention)
         

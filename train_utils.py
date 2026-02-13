@@ -150,6 +150,7 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
         num_GGNN_layers         = NUM_GGNN_LAYERS,
         act_mid_GGNN            = ACT_MID_GGNN,
         act_last_GGNN           = ACT_LAST_GGNN,
+        common_weights          = COMMON_WEIGHTS,
         
         transformer_type        = TRANSFORMER_TYPE,
         num_transf_heads        = TRANSFORMER_NUM_HEADS,
@@ -163,6 +164,7 @@ def generate_model(dataset:BaseSeizureDataset, device:str):
         spread_sequence_factor  = SPREAD_SEQUENCE_FACTOR,
         
         use_sigmoid             = USE_SIGMOID,
+        remove_softmax          = REMOVE_SOFTMAX,
         act                     = GL_ACT,
         v2                      = USE_GL_GATv2,
         concat                  = CONCAT,
@@ -466,6 +468,7 @@ def additional_info(dataset_data:list[tuple[str,Any]]) -> str:
         ("GL_DROPOUT", GL_DROPOUT),
         ("EPSILON", EPSILON),
         ("USE_SIGMOID", USE_SIGMOID),
+        ("REMOVE_SOFTMAX", REMOVE_SOFTMAX),
         ("USE_GL_GATv2", USE_GL_GATv2),
         ("CONCAT", CONCAT),
         ("BETA", BETA)
@@ -480,6 +483,7 @@ def additional_info(dataset_data:list[tuple[str,Any]]) -> str:
         ("NUM_GGNN_LAYERS", NUM_GGNN_LAYERS),
         ("ACT_MID_GGNN", ACT_MID_GGNN),
         ("ACT_LAST_GGNN", ACT_LAST_GGNN),
+        ("COMMON_WEIGHTS", COMMON_WEIGHTS),
         ("NUM_GGNN_HEADS", NUM_GGNN_HEADS),
         ("USE_GGNN_GATv2", USE_GGNN_GATv2)
     ])
