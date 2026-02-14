@@ -105,7 +105,7 @@ class CheckPoint():
         if (self.early_stop_patience is None) or (metric is None):
             return
         
-        if (self.early_stop_start is None) or (self.early_stop_patience < self.epochs_count):
+        if (self.early_stop_start is None) or (self.epochs_count < self.early_stop_start):
             return
         
         if (self.best_metric is None):

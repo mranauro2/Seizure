@@ -342,7 +342,7 @@ def train(
     
     # checkpoint init
     higher_is_better= not( dummy_metrics[0][0].lower().startswith("loss") )
-    checkpoint_observer= CheckPoint(best_k=BEST_K_MODELS, each_spacing=MAX_NUM_EPOCHS, total_epochs=num_epochs, higher_is_better=higher_is_better, early_stop_patience=EARLY_STOP_PATIENCE, early_stop_start=START_USE_EARLY_STOP)
+    checkpoint_observer= CheckPoint(best_k=BEST_K_MODELS, each_spacing=MAX_NUM_EPOCHS, total_epochs=START_EPOCH+num_epochs, higher_is_better=higher_is_better, early_stop_patience=EARLY_STOP_PATIENCE, early_stop_start=START_USE_EARLY_STOP)
     checkpoint_observer.margin= PERCENTAGE_MARGIN
     
     if verbose:
@@ -359,7 +359,7 @@ def train(
         )
     
     for index in range(START_EPOCH):
-        checkpoint_observer.update_saving(array_val[index, 0])
+        _ = checkpoint_observer.check_saving(array_val[index, 0])
     if checkpoint_observer.check_early_stop():
         LOGGER.warning(f"Reached early stop at epoch {START_EPOCH+1}, execution not started")
         return False
